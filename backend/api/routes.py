@@ -5,7 +5,7 @@ from typing import Dict, Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Header
 from backend.models.clearance import (
     ClearanceReport, DepartmentSummary, ElementReport,
-    RiskRating, Department, MonitorWebhookPayload, Verdict
+    RiskRating, Department, MonitorWebhookPayload
 )
 from backend.agents.intake_agent import parse_script_scenes
 from backend.agents.extraction_agent import extract_clearable_elements
@@ -17,16 +17,16 @@ from backend.db import storage
 router = APIRouter(prefix="/api/clearance", tags=["Clearance"])
 
 
-def run_full_clearance_pipeline(script_text: str, title: str = "Untitled Screenplay") -> ClearanceReport:
+def run_full_clearance_pipeline(script_text: str, title: str = "Screenplay Clearance Report") -> ClearanceReport:
     script_id = f"scr_{uuid.uuid4().hex[:8]}"
 
-    # Step 1: Intake & Scene Parsing via Gemini
+    # Step 1: Intake & Scene Parsing via Gemini (Raises RuntimeError if credentials or model fail)
     scenes = parse_script_scenes(script_text, script_id)
 
     # Step 2: Element Extraction across 6 Department Plugins via Gemini
     elements = extract_clearable_elements(scenes, script_id)
 
-    # Step 3: Grounded Research via Parallel & Deterministic Risk Scoring
+    # Step 3: Grounded Research via Parallel Search & Deterministic Risk Scoring
     dept_summaries: Dict[str, DepartmentSummary] = {
         dept.value: DepartmentSummary(department=dept) for dept in Department
     }
@@ -84,7 +84,7 @@ def run_full_clearance_pipeline(script_text: str, title: str = "Untitled Screenp
         generated_at=datetime.datetime.now(datetime.timezone.utc).isoformat()
     )
 
-    # Save to persistent storage (Firestore / local file)
+    # Save to persistent storage
     storage.save_report(report)
     return report
 
@@ -99,7 +99,7 @@ def run_demo_clearance():
     with open(seed_path, "r", encoding="utf-8") as f:
         script_text = f.read()
 
-    return run_full_clearance_pipeline(script_text, title="The Veloce Lounge (Seed Scene)")
+    return run_full_clearance_pipeline(script_text, title="Seeded Screenplay Scene 01")
 
 
 @router.post("/analyze", response_model=ClearanceReport)

@@ -46,6 +46,36 @@ The rules require the project be *"newly created by the entrant during the Conte
 
 **Unknown is a valid answer.** An element that can't be resolved is `AMBER / UNRESOLVED`, never a guess. This is a legal workflow; a confident wrong answer is worse than an admitted gap.
 
+## Prohibited patterns
+
+Every one of these was found in this codebase on 6 Aug 2026 and caused a rebuild. They are not style preferences. If you are about to write one, stop.
+
+**1. No silent exception handling.** `except Exception: pass` is banned outright. So is any `except` that swallows a failure and continues with substitute data. Every handler must either log and re-raise, or return an explicit typed failure that the caller propagates to the user.
+
+> This is how the project failed the first time. Three nested silent handlers meant Gemini had *never once executed* and nothing surfaced it. The UI reported findings with confidence badges the whole time.
+
+**2. No fabricating fallback.** If Gemini or Parallel is unreachable, the request **fails**. There is no offline mode, no degraded mode, no canned response. A pipeline that returns plausible output when its dependencies are down is worse than one that returns an error, because you cannot tell the difference from the outside.
+
+**3. No domain content hardcoded in `backend/`.** Element titles, artwork names, person names, addresses, brands, song titles, dates — none of these may appear as literals in extraction or research code. Everything is derived from the input document or returned by an API.
+
+> Verification: `grep -rn "Nighthawks\|Wabash\|Pendelton\|Veloce\|Hopper" backend/` must return nothing. Do the equivalent check for any seed file you test against.
+
+**4. Never write a URL you have not fetched.** Citations are copied verbatim out of a Parallel response payload. Do not construct one from a pattern, do not infer one from a domain, do not write a plausible-looking registry path. A fabricated citation in a rights-clearance tool is the single most damaging defect this project can ship.
+
+**5. Confidence scores come from the API.** Never assign one.
+
+**6. Trigger-word extraction is not extraction.** `if "print" in text.lower()` matching a *woodblock print* and emitting a hardcoded Edward Hopper painting is a real bug that happened here. Extraction is Gemini with a `response_schema`, or it does not exist.
+
+## Verification — required before you report a task complete
+
+1. `python scripts/poke.py check` — dependencies and credentials resolve.
+2. Run the pipeline against **both** `seed/scene_01.txt` and `seed/scene_02.txt`.
+3. Compare scene_02's output to `seed/scene_02.EXPECTED.md`. That file is the acceptance test.
+4. Click every citation URL the run produced. Any 404 is a failed task.
+5. Confirm the grep in prohibition 3 comes back empty.
+
+Do not report success on the basis of the pipeline running without error. Running is not the bar; the bar is that the output is true.
+
 ## Layout
 
 ```

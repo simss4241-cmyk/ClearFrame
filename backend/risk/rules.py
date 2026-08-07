@@ -1,7 +1,24 @@
+import re
 import datetime
 import uuid
-from typing import Optional, List, Callable
+from typing import Optional, List
 from backend.models.clearance import Element, Facts, Verdict, RiskRating, Department
+
+
+def is_555_fictional_range(phone_text: str) -> bool:
+    """
+    Checks if a phone number falls within NANPA's reserved fictional range:
+    555-0100 through 555-0199 (both 7-digit and 10-digit formats).
+    """
+    digits = re.sub(r'\D', '', phone_text)
+    if len(digits) == 7:
+        return digits.startswith("55501")
+    elif len(digits) == 10:
+        return digits[3:].startswith("55501")
+    elif len(digits) == 11 and digits.startswith("1"):
+        return digits[4:].startswith("55501")
+
+    return "555-01" in phone_text or "555.01" in phone_text
 
 
 def create_verdict(
@@ -46,7 +63,7 @@ def rule_mus_002(element: Element, facts: Facts, citations: List[str]) -> Option
             element=element,
             rating=RiskRating.AMBER,
             rule_id="MUS-002",
-            rationale="Composition is in the public domain, but this specific master recording is protected by copyright. License master or re-record.",
+            rationale="Composition entered US public domain, but this specific master recording is protected by copyright. License master or re-record.",
             citations=citations
         )
     return None
@@ -57,27 +74,29 @@ def rule_mus_002(element: Element, facts: Facts, citations: List[str]) -> Option
 # ----------------------------------------------------
 def rule_sig_001(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
     """SIG-001: Phone number outside reserved 555 range."""
-    if element.subtype == "PHONE" and facts.is_555_range is False:
-        return create_verdict(
-            element=element,
-            rating=RiskRating.RED,
-            rule_id="SIG-001",
-            rationale="Phone number is outside the reserved 555 fictitious range (555-0100 through 555-0199). High live line collision risk.",
-            citations=citations
-        )
+    if element.subtype == "PHONE":
+        if facts.is_555_range is False or not is_555_fictional_range(element.text):
+            return create_verdict(
+                element=element,
+                rating=RiskRating.RED,
+                rule_id="SIG-001",
+                rationale="Phone number is outside the reserved 555 fictional range (555-0100 through 555-0199). High live line collision risk.",
+                citations=citations
+            )
     return None
 
 
 def rule_sig_002(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
     """SIG-002: Phone number inside reserved 555 range."""
-    if element.subtype == "PHONE" and facts.is_555_range is True:
-        return create_verdict(
-            element=element,
-            rating=RiskRating.GREEN,
-            rule_id="SIG-002",
-            rationale="Phone number is safely within the reserved NANPA 555 fictitious range.",
-            citations=citations
-        )
+    if element.subtype == "PHONE":
+        if facts.is_555_range is True or is_555_fictional_range(element.text):
+            return create_verdict(
+                element=element,
+                rating=RiskRating.GREEN,
+                rule_id="SIG-002",
+                rationale="Phone number is safely within the reserved NANPA 555-0100 through 555-0199 fictitious range.",
+                citations=citations
+            )
     return None
 
 
@@ -158,17 +177,3 @@ def rule_vis_002(element: Element, facts: Facts, citations: List[str]) -> Option
             citations=citations
         )
     return None
-
-
-# Ordered rule list
-ALL_RULES: List[Callable[[Element, Facts, List[str]], Optional[Verdict]]] = [
-    rule_mus_001,
-    rule_mus_002,
-    rule_sig_001,
-    rule_sig_002,
-    rule_cas_001,
-    rule_loc_001,
-    rule_prp_001,
-    rule_vis_001,
-    rule_vis_002,
-]

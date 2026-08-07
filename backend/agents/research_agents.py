@@ -1,22 +1,16 @@
 import datetime
 import uuid
-from typing import Dict, Any, List
-from backend.models.clearance import Element, Finding, Department
+from backend.models.clearance import Element, Finding
 from backend.tools.parallel_tools import deep_research_element_parallel
 
 
 def conduct_department_research(element: Element) -> Finding:
     """
     Executes Parallel research for an extracted script element.
-    STRICT COMPLIANCE: Collects ONLY raw grounded facts and basis citations.
-    Zero risk rating or severity assignment happens in this step.
+    Passes full Element model to deep_research_element_parallel.
+    Zero risk rating or severity assignment in this step.
     """
-    res = deep_research_element_parallel(
-        element_text=element.text,
-        department=element.department,
-        subtype=element.subtype,
-        context_snippet=element.context_snippet
-    )
+    res = deep_research_element_parallel(element)
 
     finding = Finding(
         id=f"find_{uuid.uuid4().hex[:8]}",

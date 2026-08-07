@@ -1,176 +1,145 @@
 import os
 import uuid
+import json
 import datetime
-from typing import Dict, Any, List, Optional
-from backend.models.clearance import Facts, BasisItem, Department
-
-try:
-    from parallel import Parallel
-except ImportError:
-    Parallel = None
+from typing import Dict, Any, List
+from google.genai import types
+from backend.models.clearance import Element, Facts, BasisItem, Department
+from backend.clients import get_parallel_client, get_gemini_client, get_gemini_model_name
 
 
-def get_parallel_client() -> Optional[Any]:
-    api_key = os.getenv("PARALLEL_API_KEY")
-    if api_key and Parallel is not None:
-        try:
-            return Parallel(api_key=api_key)
-        except Exception:
-            return None
-    return None
-
-
-def search_element_parallel(query: str, objective: str) -> Dict[str, Any]:
+def conduct_parallel_search(objective: str, search_queries: List[str]) -> Dict[str, Any]:
     """
-    Fast triage using Parallel Search API.
-    Invokes client.search(search_queries=[query], objective=objective, mode="turbo") per Parallel SDK spec.
+    Executes Parallel Search API using exact SDK signature:
+    client.search(objective=..., search_queries=..., mode=...)
+    Raises if API call fails.
     """
     client = get_parallel_client()
-    search_id = f"par_srch_{uuid.uuid4().hex[:8]}"
+    mode = os.getenv("PARALLEL_SEARCH_MODE", "advanced")
 
-    if client:
-        try:
-            # Parallel SDK Search call with correct signature
-            res = client.search(
-                search_queries=[query],
-                objective=objective,
-                mode="turbo"
-            )
+    res = client.search(
+        objective=objective,
+        search_queries=search_queries,
+        mode=mode
+    )
 
-            # Extract real search result items
-            results_data = []
-            if hasattr(res, "results") and res.results:
-                for item in res.results:
-                    results_data.append({
-                        "title": getattr(item, "title", "Search Result"),
-                        "url": getattr(item, "url", ""),
-                        "snippet": getattr(item, "snippet", "")
-                    })
+    results_data = []
+    if hasattr(res, "results") and res.results:
+        for item in res.results:
+            url = getattr(item, "url", "")
+            title = getattr(item, "title", "Search Result")
+            snippet = getattr(item, "snippet", "")
+            excerpts = getattr(item, "excerpts", []) or []
 
-            return {
-                "search_id": getattr(res, "id", search_id),
-                "results": results_data,
-                "query": query
-            }
-        except Exception as e:
-            # Log error gracefully if API call fails
-            pass
+            excerpts_text = " ".join([e for e in excerpts if isinstance(e, str)])
+            full_text = f"{snippet} {excerpts_text}".strip()
+
+            if url:
+                results_data.append({
+                    "title": title,
+                    "url": url,
+                    "snippet": full_text[:1000]
+                })
 
     return {
-        "search_id": search_id,
-        "results": [],
-        "query": query
+        "search_id": getattr(res, "search_id", f"par_srch_{uuid.uuid4().hex[:8]}"),
+        "results": results_data
     }
 
 
 def deep_research_element_parallel(
-    element_text: str,
-    department: Department,
-    subtype: str,
-    context_snippet: str
+    element: Element
 ) -> Dict[str, Any]:
     """
-    Deep research using Parallel Search/Task API.
-    Collects ONLY real web URLs for evidentiary basis.
+    Executes Parallel Search research and uses Gemini to derive raw factual indicators
+    STRICTLY from the search excerpts. Zero hardcoded domain facts or invented URLs.
     """
-    objective = f"Clearance evidence research for {subtype} '{element_text}' in scene: {context_snippet}"
-    search_res = search_element_parallel(query=f"{subtype} {element_text}", objective=objective)
-    
-    facts = Facts()
-    basis: List[BasisItem] = []
+    objective = (
+        f"Determine the copyright, trademark, publicity, or location rights clearance status "
+        f"of the {element.subtype} '{element.text}' (department: {element.department.value}) "
+        f"given context: '{element.context_snippet}'"
+    )
 
-    # If Parallel search returned real results, parse them into basis items!
-    raw_results = search_res.get("results", [])
-    for item in raw_results:
-        url = item.get("url")
-        snippet = item.get("snippet", "")
+    search_queries = [
+        f"{element.text} {element.subtype} copyright rights clearance",
+        f"{element.text} legal status"
+    ]
+
+    search_res = conduct_parallel_search(objective, search_queries)
+    results = search_res.get("results", [])
+
+    basis: List[BasisItem] = []
+    excerpts_for_gemini: List[str] = []
+
+    for r in results:
+        url = r.get("url")
+        snippet = r.get("snippet", "")
         if url:
             basis.append(BasisItem(
                 url=url,
-                reasoning=snippet[:200] if snippet else f"Live Parallel web search evidence for {element_text}",
-                confidence=0.92
+                reasoning=snippet[:250] if snippet else f"Live Parallel search result for {element.text}",
+                confidence=0.90
             ))
+            excerpts_for_gemini.append(f"Source URL: {url}\nExcerpt: {snippet}")
 
-    # Department factual indicator extraction
-    text_lower = element_text.lower()
+    # If no Parallel results were returned, return empty facts (Risk engine yields AMBER / DEFAULT-000)
+    if not excerpts_for_gemini:
+        return {
+            "facts": Facts(raw_summary=f"No live web search evidence retrieved for '{element.text}'."),
+            "basis": [],
+            "parallel_search_id": search_res["search_id"]
+        }
 
-    if department == Department.SOUND_MUSIC:
-        # e.g., "St. Louis Blues" (1914 composition by W.C. Handy)
-        facts.is_public_domain = True
-        facts.master_recording_protected = True
-        facts.raw_summary = "Composition registered in 1914 by W.C. Handy (Public Domain). 1968 stereo master recording protected under copyright."
-        if not basis:
-            basis.append(BasisItem(
-                url="https://en.wikipedia.org/wiki/St._Louis_Blues_(song)",
-                reasoning="W.C. Handy published 'St. Louis Blues' in 1914. Pre-1928 public domain window applies to the musical composition.",
-                confidence=0.98
-            ))
-            basis.append(BasisItem(
-                url="https://www.copyright.gov/circs/circ56.pdf",
-                reasoning="Sound recordings fixed prior to Feb 15, 1972 are subject to federal copyright terms based on date of first publication.",
-                confidence=0.95
-            ))
+    # Pass Parallel search excerpts to Gemini to extract raw factual fields ONLY if supported by excerpts
+    gemini_client = get_gemini_client()
+    model = get_gemini_model_name()
 
-    elif department == Department.SCRIPT_SIGNAGE:
-        # e.g., "312-891-4029"
-        if "555" in element_text:
-            facts.is_555_range = True
-            facts.raw_summary = "Phone number is within the reserved 555-0100 through 555-0199 fictitious range."
-        else:
-            facts.is_555_range = False
-            facts.raw_summary = "Phone number (312-891-4029) is an active area code 312 line outside the reserved fictitious 555 range."
-            if not basis:
-                basis.append(BasisItem(
-                    url="https://www.nationalnanpa.com/number_resource_info/555_numbers.html",
-                    reasoning="NANPA guidelines reserve strictly 555-0100 to 555-0199 for fictional entertainment use. Area code 312 is active in Chicago.",
-                    confidence=1.00
-                ))
+    prompt = (
+        f"You are a factual evidence analyst for screenplay clearance.\n"
+        f"Target Element: '{element.text}' (Subtype: {element.subtype}, Dept: {element.department.value})\n"
+        f"Context Snippet: '{element.context_snippet}'\n\n"
+        f"Read the following live web search excerpts retrieved from Parallel:\n"
+        f"{chr(10).join(excerpts_for_gemini)}\n\n"
+        "STRICT INSTRUCTIONS:\n"
+        "1. Extract ONLY factual indicators that are EXPLICITLY supported by the search excerpts.\n"
+        "2. If an excerpt states a musical composition is in the public domain, set is_public_domain=true.\n"
+        "3. If an excerpt states a master sound recording is protected, set master_recording_protected=true.\n"
+        "4. If searching a person name and excerpts show a real living person in the same city/profession, set living_person_match_count=1 and living_person_same_profession=true.\n"
+        "5. Leave any unproven field as null/None.\n"
+        "6. Do NOT invent facts or URLs. Summarize excerpts objectively in raw_summary."
+    )
 
-    elif department == Department.CAST_CHARACTERS:
-        facts.living_person_match_count = 1
-        facts.living_person_same_profession = True
-        facts.living_person_city = "Chicago, IL"
-        facts.raw_summary = "Active living individual matching character name and neurosurgery specialty in Chicago, IL."
-        if not basis:
-            basis.append(BasisItem(
-                url="https://www.idfpr.illinois.gov/profs/med.html",
-                reasoning="Illinois Department of Financial and Professional Regulation active physician licensing directory.",
-                confidence=0.95
-            ))
+    response = gemini_client.models.generate_content(
+        model=model,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema={
+                "type": "OBJECT",
+                "properties": {
+                    "is_public_domain": {"type": "BOOLEAN", "nullable": True},
+                    "master_recording_protected": {"type": "BOOLEAN", "nullable": True},
+                    "is_555_range": {"type": "BOOLEAN", "nullable": True},
+                    "living_person_match_count": {"type": "INTEGER"},
+                    "living_person_same_profession": {"type": "BOOLEAN", "nullable": True},
+                    "living_person_city": {"type": "STRING", "nullable": True},
+                    "is_real_address": {"type": "BOOLEAN", "nullable": True},
+                    "is_private_property": {"type": "BOOLEAN", "nullable": True},
+                    "is_trademarked_brand": {"type": "BOOLEAN", "nullable": True},
+                    "is_depiction_disparaging": {"type": "BOOLEAN", "nullable": True},
+                    "artwork_author_death_year": {"type": "INTEGER", "nullable": True},
+                    "copyright_expiration_year": {"type": "INTEGER", "nullable": True},
+                    "raw_summary": {"type": "STRING"}
+                },
+                "required": ["raw_summary"]
+            }
+        )
+    )
 
-    elif department == Department.LOCATIONS_SETS:
-        facts.is_real_address = True
-        facts.is_private_property = True
-        facts.raw_summary = "842 N Wabash Ave, Chicago, IL is a real commercial building requiring location release."
-        if not basis:
-            basis.append(BasisItem(
-                url="https://www.chicago.gov/city/en/depts/zoning.html",
-                reasoning="City of Chicago address locator confirms real commercial zoning location on Wabash Ave.",
-                confidence=0.98
-            ))
-
-    elif department == Department.PROPS_BRANDS:
-        facts.is_trademarked_brand = True
-        facts.is_depiction_disparaging = True
-        facts.raw_summary = "Trademarked brand depicted disparagingly in script dialogue (toxic runoff, solvent taste)."
-        if not basis:
-            basis.append(BasisItem(
-                url="https://www.uspto.gov/trademarks",
-                reasoning="USPTO Trademark Database records active commercial soft drink / energy drink classification.",
-                confidence=0.94
-            ))
-
-    elif department == Department.CAMERA_VISUALS:
-        facts.artwork_author_death_year = 1967
-        facts.copyright_expiration_year = 2038
-        facts.is_public_domain = False
-        facts.raw_summary = "Nighthawks by Edward Hopper (1942). Hopper died 1967; work protected until 2038."
-        if not basis:
-            basis.append(BasisItem(
-                url="https://www.artic.edu/artworks/111628/nighthawks",
-                reasoning="Art Institute of Chicago collection record for Edward Hopper's 1942 oil painting Nighthawks.",
-                confidence=0.97
-            ))
+    facts = Facts()
+    if response.text:
+        parsed_facts = json.loads(response.text)
+        facts = Facts.model_validate(parsed_facts)
 
     return {
         "facts": facts,
