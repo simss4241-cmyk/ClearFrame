@@ -1,0 +1,15 @@
+# Google Cloud — the ONLY permitted AI/agent tooling (see docs/COMPLIANCE.md)
+google-adk
+google-genai
+google-cloud-storage
+google-cloud-firestore
+
+# Parallel — partner track integration
+parallel-web
+
+# non-AI infrastructure
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+python-multipart

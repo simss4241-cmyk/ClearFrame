@@ -1,0 +1,26 @@
+# secrets — never commit
+.env
+.env.local
+*-service-account.json
+*credentials*.json
+gcp-key*.json
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# node
+node_modules/
+
+# local artifacts
+.write_test
+uploads/
+data_store.json
+*.log
+.DS_Store
+

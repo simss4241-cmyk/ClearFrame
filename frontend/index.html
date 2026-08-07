@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CLEARFRAME — Screenplay Clearance Production Studio</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-theme">
+
+    <!-- Top Navigation Header -->
+    <header class="studio-header">
+        <div class="brand">
+            <div class="logo-mark">CF</div>
+            <div class="brand-text">
+                <h1>CLEARFRAME</h1>
+                <span class="sub-heading">Production Studio &amp; Script Clearance Agent</span>
+            </div>
+        </div>
+
+        <div class="engine-badges">
+            <div class="badge gcp"><span class="dot"></span> Google Cloud ADK &amp; Gemini</div>
+            <div class="badge parallel"><span class="dot"></span> Parallel Search &amp; Monitor</div>
+        </div>
+
+        <div class="header-actions">
+            <button id="btn-demo" class="btn btn-primary">
+                <span class="icon">🎬</span> Run Demo Scene
+            </button>
+            <label for="script-file-input" class="btn btn-secondary">
+                <span class="icon">📁</span> Upload Script
+            </label>
+            <input type="file" id="script-file-input" accept=".txt,.fdx,.pdf" hidden>
+        </div>
+    </header>
+
+    <!-- Main Studio Workspace -->
+    <main class="studio-workspace">
+
+        <!-- Left Column: The Script Viewer (The Master Shot) -->
+        <section class="panel script-panel">
+            <div class="panel-header">
+                <h2><span class="icon">📜</span> Screenplay Viewer</h2>
+                <div class="script-meta" id="script-title">The Veloce Lounge (Scene 01)</div>
+            </div>
+            <div class="script-content-wrapper" id="script-content">
+                <div class="empty-state">
+                    <p>Click <strong>Run Demo Scene</strong> to load the seeded short screenplay and initiate clearance analysis.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Column: Clearance Radar & Department Plugins -->
+        <section class="panel report-panel">
+            
+            <!-- Clearance Radar Dashboard -->
+            <div class="radar-dashboard">
+                <div class="radar-header">
+                    <h3>CLEARANCE RADAR</h3>
+                    <span class="radar-status" id="radar-status">Ready</span>
+                </div>
+                <div class="radar-metrics">
+                    <div class="metric-card total">
+                        <span class="value" id="metric-total">0</span>
+                        <span class="label">Elements</span>
+                    </div>
+                    <div class="metric-card red">
+                        <span class="value" id="metric-red">0</span>
+                        <span class="label">RED Risk</span>
+                    </div>
+                    <div class="metric-card amber">
+                        <span class="value" id="metric-amber">0</span>
+                        <span class="label">AMBER Review</span>
+                    </div>
+                    <div class="metric-card green">
+                        <span class="value" id="metric-green">0</span>
+                        <span class="label">GREEN Clear</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Department Plugin Tab Bar -->
+            <nav class="department-tabs" id="dept-tabs">
+                <button class="tab-btn active" data-dept="SOUND_MUSIC">
+                    <span class="tab-icon">🎵</span> Sound &amp; Music
+                    <span class="tab-badge" id="badge-SOUND_MUSIC">0</span>
+                </button>
+                <button class="tab-btn" data-dept="SCRIPT_SIGNAGE">
+                    <span class="tab-icon">📜</span> Script &amp; Signage
+                    <span class="tab-badge" id="badge-SCRIPT_SIGNAGE">0</span>
+                </button>
+                <button class="tab-btn" data-dept="CAST_CHARACTERS">
+                    <span class="tab-icon">🎭</span> Cast &amp; Characters
+                    <span class="tab-badge" id="badge-CAST_CHARACTERS">0</span>
+                </button>
+                <button class="tab-btn" data-dept="LOCATIONS_SETS">
+                    <span class="tab-icon">📍</span> Locations &amp; Sets
+                    <span class="tab-badge" id="badge-LOCATIONS_SETS">0</span>
+                </button>
+                <button class="tab-btn" data-dept="PROPS_BRANDS">
+                    <span class="tab-icon">🏷️</span> Props &amp; Brands
+                    <span class="tab-badge" id="badge-PROPS_BRANDS">0</span>
+                </button>
+                <button class="tab-btn" data-dept="CAMERA_VISUALS">
+                    <span class="tab-icon">🎨</span> Camera &amp; Visuals
+                    <span class="tab-badge" id="badge-CAMERA_VISUALS">0</span>
+                </button>
+            </nav>
+
+            <!-- Department Cards Workspace -->
+            <div class="plugin-workspace" id="plugin-workspace">
+                <div class="empty-state">
+                    <p>Select a Department Plugin or run an analysis to view cited findings and deterministic verdicts.</p>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Bottom Parallel Live Watch Drawer -->
+    <footer class="watch-drawer" id="watch-drawer">
+        <div class="drawer-header" id="drawer-toggle">
+            <div class="drawer-title">
+                <span class="pulse-indicator"></span>
+                <strong>PARALLEL LIVE WATCH</strong>
+                <span class="monitor-count" id="monitor-count">0 Active Monitors</span>
+            </div>
+            <div class="drawer-control">
+                <span class="toggle-icon">▲</span>
+            </div>
+        </div>
+        <div class="drawer-body" id="drawer-body">
+            <div class="monitor-feed" id="monitor-feed">
+                <div class="feed-item placeholder">
+                    <span class="timestamp">--:--:--</span>
+                    <span class="event-text">Parallel Monitor standing watch on flagged RED &amp; AMBER elements. Webhook events will stream here.</span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "parallel-search": {
+      "httpUrl": "https://search.parallel.ai/mcp"
+    }
+  }
+}
