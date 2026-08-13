@@ -69,4 +69,4 @@ def get_parallel_client() -> Any:
 
 
 def get_gemini_model_name() -> str:
-    return os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    return os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")

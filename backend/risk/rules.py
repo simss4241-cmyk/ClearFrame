@@ -69,13 +69,26 @@ def rule_mus_002(element: Element, facts: Facts, citations: List[str]) -> Option
     return None
 
 
+def rule_mus_003(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
+    """MUS-003: Composition protected by active copyright."""
+    if facts.is_public_domain is False:
+        return create_verdict(
+            element=element,
+            rating=RiskRating.RED,
+            rule_id="MUS-003",
+            rationale="Musical composition is protected by active copyright. Synchronization license required from music publisher.",
+            citations=citations
+        )
+    return None
+
+
 # ----------------------------------------------------
 # Department: SCRIPT_SIGNAGE
 # ----------------------------------------------------
 def rule_sig_001(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
     """SIG-001: Phone number outside reserved 555 range."""
     if element.subtype == "PHONE":
-        if facts.is_555_range is False or not is_555_fictional_range(element.text):
+        if facts.is_555_range is False or (facts.is_555_range is None and not is_555_fictional_range(element.text)):
             return create_verdict(
                 element=element,
                 rating=RiskRating.RED,
@@ -89,7 +102,7 @@ def rule_sig_001(element: Element, facts: Facts, citations: List[str]) -> Option
 def rule_sig_002(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
     """SIG-002: Phone number inside reserved 555 range."""
     if element.subtype == "PHONE":
-        if facts.is_555_range is True or is_555_fictional_range(element.text):
+        if facts.is_555_range is True or (facts.is_555_range is None and is_555_fictional_range(element.text)):
             return create_verdict(
                 element=element,
                 rating=RiskRating.GREEN,
@@ -105,7 +118,7 @@ def rule_sig_002(element: Element, facts: Facts, citations: List[str]) -> Option
 # ----------------------------------------------------
 def rule_cas_001(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
     """CAS-001: Character collides with a living person in the same city and profession."""
-    if facts.living_person_match_count > 0 and facts.living_person_same_profession is True:
+    if facts.living_person_match_count is not None and facts.living_person_match_count > 0 and facts.living_person_same_profession is True:
         city_str = f" in {facts.living_person_city}" if facts.living_person_city else ""
         return create_verdict(
             element=element,
@@ -154,7 +167,8 @@ def rule_prp_001(element: Element, facts: Facts, citations: List[str]) -> Option
 # ----------------------------------------------------
 def rule_vis_001(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
     """VIS-001: Visual artwork under active copyright protection."""
-    if facts.is_public_domain is False or (facts.copyright_expiration_year and facts.copyright_expiration_year > 2026):
+    current_year = datetime.datetime.now(datetime.timezone.utc).year
+    if facts.is_public_domain is False or (facts.copyright_expiration_year and facts.copyright_expiration_year > current_year):
         exp = f" (expires {facts.copyright_expiration_year})" if facts.copyright_expiration_year else ""
         return create_verdict(
             element=element,

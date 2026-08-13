@@ -189,6 +189,12 @@ body {
     gap: 8px;
 }
 
+.script-meta-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .script-meta {
     font-size: 12px;
     font-family: var(--font-mono);
@@ -196,6 +202,16 @@ body {
     background: rgba(56, 189, 248, 0.1);
     padding: 3px 8px;
     border-radius: 4px;
+}
+
+.script-hash-tag {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    background: #181d2a;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid #252c3d;
 }
 
 /* Script Viewer */
@@ -286,6 +302,11 @@ body {
     font-size: 11px;
     font-family: var(--font-mono);
     color: var(--accent-cyan);
+    font-weight: 600;
+}
+
+.radar-status.error {
+    color: var(--risk-red);
 }
 
 .radar-metrics {
@@ -301,7 +322,6 @@ body {
     border-radius: 8px;
     display: flex;
     flex-direction: column;
-
 }
 
 .metric-card .value {
@@ -318,6 +338,45 @@ body {
 .metric-card.red .value { color: var(--risk-red); }
 .metric-card.amber .value { color: var(--risk-amber); }
 .metric-card.green .value { color: var(--risk-green); }
+
+/* Error Banner */
+.error-banner-wrapper {
+    padding: 16px 20px;
+    background: rgba(239, 68, 68, 0.08);
+    border-bottom: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.error-banner {
+    background: #1f1315;
+    border: 1px solid var(--risk-red);
+    border-radius: 8px;
+    padding: 16px;
+    color: #fca5a5;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.error-banner h4 {
+    color: var(--risk-red);
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.error-banner .error-details {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background: #0f0a0b;
+    padding: 10px;
+    border-radius: 4px;
+    margin-top: 10px;
+    word-break: break-all;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #f87171;
+}
 
 /* Department Tabs */
 .department-tabs {
@@ -399,6 +458,17 @@ body {
 .clearance-card.red { border-left: 4px solid var(--risk-red); }
 .clearance-card.amber { border-left: 4px solid var(--risk-amber); }
 .clearance-card.green { border-left: 4px solid var(--risk-green); }
+
+.card-provenance-bar {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    background: #0f121a;
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: flex;
+    justify-content: space-between;
+}
 
 .card-header {
     display: flex;

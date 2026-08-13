@@ -1,7 +1,10 @@
 import os
 import json
+import logging
 from typing import Dict, Optional
 from backend.models.clearance import ClearanceReport
+
+logger = logging.getLogger("clearframe.db")
 
 try:
     from google.cloud import firestore
@@ -12,7 +15,7 @@ except ImportError:
 class ClearanceStorage:
     """
     Persistent storage layer using Firestore in Cloud Run,
-    backed by local JSON persistence for standalone execution.
+    backed by local JSON file storage for local execution.
     """
 
     def __init__(self):
@@ -23,8 +26,9 @@ class ClearanceStorage:
         if firestore is not None and os.getenv("GOOGLE_CLOUD_PROJECT"):
             try:
                 self.db = firestore.Client()
-            except Exception:
-                self.db = None
+            except Exception as e:
+                logger.error(f"Failed to initialize Firestore client: {e}")
+                raise RuntimeError(f"Firestore initialization failed: {e}") from e
 
         self._load_local_store()
 
@@ -35,8 +39,9 @@ class ClearanceStorage:
                     data = json.load(f)
                     for script_id, raw in data.items():
                         self.cache[script_id] = ClearanceReport.model_validate(raw)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"Failed to load local data store ({self.local_file}): {e}")
+                raise RuntimeError(f"Data store load failed: {e}") from e
 
     def _save_local_store(self):
         try:
@@ -44,8 +49,9 @@ class ClearanceStorage:
             serializable = {k: v.model_dump() for k, v in self.cache.items()}
             with open(self.local_file, "w", encoding="utf-8") as f:
                 json.dump(serializable, f, indent=2)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to save local data store ({self.local_file}): {e}")
+            raise RuntimeError(f"Data store save failed: {e}") from e
 
     def save_report(self, report: ClearanceReport):
         self.cache[report.script_id] = report
@@ -55,8 +61,9 @@ class ClearanceStorage:
             try:
                 doc_ref = self.db.collection("clearance_reports").document(report.script_id)
                 doc_ref.set(report.model_dump())
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"Firestore document write failed for script_id={report.script_id}: {e}")
+                raise RuntimeError(f"Firestore write failed: {e}") from e
 
     def get_report(self, script_id: str) -> Optional[ClearanceReport]:
         if script_id in self.cache:
@@ -70,8 +77,9 @@ class ClearanceStorage:
                     report = ClearanceReport.model_validate(doc.to_dict())
                     self.cache[script_id] = report
                     return report
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"Firestore document read failed for script_id={script_id}: {e}")
+                raise RuntimeError(f"Firestore read failed: {e}") from e
 
         return None
 

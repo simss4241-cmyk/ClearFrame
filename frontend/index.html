@@ -45,11 +45,14 @@
         <section class="panel script-panel">
             <div class="panel-header">
                 <h2><span class="icon">📜</span> Screenplay Viewer</h2>
-                <div class="script-meta" id="script-title">The Veloce Lounge (Scene 01)</div>
+                <div class="script-meta-group">
+                    <span class="script-meta" id="script-filename">No script loaded</span>
+                    <span class="script-hash-tag" id="script-hash">--</span>
+                </div>
             </div>
             <div class="script-content-wrapper" id="script-content">
                 <div class="empty-state">
-                    <p>Click <strong>Run Demo Scene</strong> to load the seeded short screenplay and initiate clearance analysis.</p>
+                    <p>No script loaded. Click <strong>Upload Script</strong> to analyze a screenplay, or click <strong>Run Demo Scene</strong> to test with the example fixture.</p>
                 </div>
             </div>
         </section>
@@ -61,7 +64,7 @@
             <div class="radar-dashboard">
                 <div class="radar-header">
                     <h3>CLEARANCE RADAR</h3>
-                    <span class="radar-status" id="radar-status">Ready</span>
+                    <span class="radar-status" id="radar-status">Idle</span>
                 </div>
                 <div class="radar-metrics">
                     <div class="metric-card total">
@@ -82,6 +85,9 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Error Banner Container -->
+            <div class="error-banner-wrapper" id="error-banner-wrapper" style="display: none;"></div>
 
             <!-- Department Plugin Tab Bar -->
             <nav class="department-tabs" id="dept-tabs">

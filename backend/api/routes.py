@@ -1,8 +1,10 @@
 import os
 import uuid
+import hashlib
 import datetime
 from typing import Dict, Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Header
+from fastapi.responses import JSONResponse
 from backend.models.clearance import (
     ClearanceReport, DepartmentSummary, ElementReport,
     RiskRating, Department, MonitorWebhookPayload
@@ -17,10 +19,11 @@ from backend.db import storage
 router = APIRouter(prefix="/api/clearance", tags=["Clearance"])
 
 
-def run_full_clearance_pipeline(script_text: str, title: str = "Screenplay Clearance Report") -> ClearanceReport:
+def run_full_clearance_pipeline(script_text: str, filename: str = "script.txt", title: str = "Screenplay Clearance Report") -> ClearanceReport:
     script_id = f"scr_{uuid.uuid4().hex[:8]}"
+    script_hash = hashlib.sha256(script_text.encode("utf-8")).hexdigest()[:12]
 
-    # Step 1: Intake & Scene Parsing via Gemini (Raises RuntimeError if credentials or model fail)
+    # Step 1: Intake & Scene Parsing via Gemini
     scenes = parse_script_scenes(script_text, script_id)
 
     # Step 2: Element Extraction across 6 Department Plugins via Gemini
@@ -38,6 +41,8 @@ def run_full_clearance_pipeline(script_text: str, title: str = "Screenplay Clear
     element_reports: list[ElementReport] = []
 
     for element in elements:
+        element.quoted_source_passage = element.context_snippet
+
         # Grounded research via Parallel Search/Task (real URLs strictly)
         finding = conduct_department_research(element)
 
@@ -74,6 +79,8 @@ def run_full_clearance_pipeline(script_text: str, title: str = "Screenplay Clear
 
     report = ClearanceReport(
         script_id=script_id,
+        filename=filename,
+        script_hash=script_hash,
         title=title,
         scenes=scenes,
         departments=dept_summaries,
@@ -81,6 +88,7 @@ def run_full_clearance_pipeline(script_text: str, title: str = "Screenplay Clear
         red_count=total_red,
         amber_count=total_amber,
         green_count=total_green,
+        status="COMPLETE",
         generated_at=datetime.datetime.now(datetime.timezone.utc).isoformat()
     )
 
@@ -89,9 +97,9 @@ def run_full_clearance_pipeline(script_text: str, title: str = "Screenplay Clear
     return report
 
 
-@router.get("/demo", response_model=ClearanceReport)
+@router.get("/demo")
 def run_demo_clearance():
-    """Runs end-to-end clearance pipeline on the seeded test scene."""
+    """Runs end-to-end clearance pipeline ONLY on explicit demo button click."""
     seed_path = os.path.join(os.path.dirname(__file__), "..", "..", "seed", "scene_01.txt")
     if not os.path.exists(seed_path):
         raise HTTPException(status_code=404, detail="Seed scene file not found.")
@@ -99,19 +107,59 @@ def run_demo_clearance():
     with open(seed_path, "r", encoding="utf-8") as f:
         script_text = f.read()
 
-    return run_full_clearance_pipeline(script_text, title="Seeded Screenplay Scene 01")
+    try:
+        return run_full_clearance_pipeline(script_text, filename="scene_01.txt", title="Seeded Screenplay Scene 01")
+    except Exception as e:
+        script_hash = hashlib.sha256(script_text.encode("utf-8")).hexdigest()[:12]
+        return JSONResponse(
+            status_code=502,
+            content={
+                "detail": str(e),
+                "filename": "scene_01.txt",
+                "script_hash": script_hash,
+                "status": "INCOMPLETE_ERROR"
+            }
+        )
 
 
-@router.post("/analyze", response_model=ClearanceReport)
-def analyze_script(text: str = Form(None), title: str = Form("Uploaded Screenplay"), file: UploadFile = File(None)):
-    """Ingests raw text or script file and returns full clearance report."""
-    if file:
-        content = file.file.read().decode("utf-8", errors="ignore")
-        return run_full_clearance_pipeline(content, title=file.filename or title)
+@router.post("/analyze")
+def analyze_script(
+    text: Optional[str] = Form(None),
+    filename: Optional[str] = Form("submitted_script.txt"),
+    title: Optional[str] = Form("Uploaded Screenplay"),
+    file: Optional[UploadFile] = File(None)
+):
+    """
+    Ingests raw text or script file and returns full clearance report.
+    FAIL-LOUD ENFORCEMENT: Never substitutes example content during a real run.
+    If Gemini/Parallel fails, returns a 502 JSON error marking the run INCOMPLETE.
+    """
+    script_text = ""
+    target_filename = filename or "submitted_script.txt"
+
+    if file is not None and hasattr(file, "file"):
+        script_text = file.file.read().decode("utf-8", errors="ignore")
+        if file.filename:
+            target_filename = file.filename
     elif text:
-        return run_full_clearance_pipeline(text, title=title)
+        script_text = text
     else:
         raise HTTPException(status_code=400, detail="Must provide script text or file.")
+
+    script_hash = hashlib.sha256(script_text.encode("utf-8")).hexdigest()[:12]
+
+    try:
+        return run_full_clearance_pipeline(script_text, filename=target_filename, title=title or target_filename)
+    except Exception as err:
+        return JSONResponse(
+            status_code=502,
+            content={
+                "detail": str(err),
+                "filename": target_filename,
+                "script_hash": script_hash,
+                "status": "INCOMPLETE_ERROR"
+            }
+        )
 
 
 @router.get("/report/{script_id}", response_model=ClearanceReport)
@@ -124,12 +172,6 @@ def get_report(script_id: str):
 
 @router.post("/webhooks/monitor")
 def parallel_monitor_webhook(payload: MonitorWebhookPayload, x_monitor_secret: Optional[str] = Header(None)):
-    """
-    Parallel Monitor Webhook: Real-time event handler.
-    Secured by MONITOR_WEBHOOK_SECRET header when configured.
-    IDEMPOTENCY & AUDIT HISTORY: Appends a new Verdict with superseded_by reference
-    to preserve audit trail rather than mutating the original verdict.
-    """
     secret = os.getenv("MONITOR_WEBHOOK_SECRET")
     if secret and x_monitor_secret != secret:
         raise HTTPException(status_code=401, detail="Invalid webhook secret signature.")

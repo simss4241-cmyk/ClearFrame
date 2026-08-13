@@ -33,12 +33,13 @@ class Element(BaseModel):
     subtype: str
     text: str
     context_snippet: str
+    quoted_source_passage: str = ""
 
 
 class BasisItem(BaseModel):
     url: str
     reasoning: str
-    confidence: float = Field(default=0.9, ge=0.0, le=1.0)
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
 
 class Facts(BaseModel):
@@ -49,7 +50,7 @@ class Facts(BaseModel):
     is_public_domain: Optional[bool] = None
     master_recording_protected: Optional[bool] = None
     is_555_range: Optional[bool] = None
-    living_person_match_count: int = 0
+    living_person_match_count: Optional[int] = None
     living_person_same_profession: Optional[bool] = None
     living_person_city: Optional[str] = None
     is_real_address: Optional[bool] = None
@@ -99,26 +100,31 @@ class DepartmentSummary(BaseModel):
     elements: List[ElementReport] = Field(default_factory=list)
 
 
+class MonitorRegistration(BaseModel):
+    id: str
+    element_id: str
+    parallel_monitor_id: Optional[str] = None
+    query: str
+    department: Department
+    frequency: str = "1d"
+    status: str = "ACTIVE"
+
+
 class ClearanceReport(BaseModel):
     script_id: str
+    filename: str = "script.txt"
+    script_hash: str = ""
     title: str
     scenes: List[Scene] = Field(default_factory=list)
     departments: Dict[str, DepartmentSummary] = Field(default_factory=dict)
+    monitors: List[MonitorRegistration] = Field(default_factory=list)
     total_elements: int = 0
     red_count: int = 0
     amber_count: int = 0
     green_count: int = 0
+    status: str = "COMPLETE"
+    error_message: Optional[str] = None
     generated_at: str
-
-
-class MonitorRegistration(BaseModel):
-    id: str
-    element_id: str
-    parallel_monitor_id: str
-    query: str
-    department: Department
-    frequency: str = "daily"
-    status: str = "ACTIVE"
 
 
 class MonitorWebhookPayload(BaseModel):
