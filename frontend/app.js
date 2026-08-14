@@ -56,22 +56,80 @@ document.addEventListener("DOMContentLoaded", () => {
         monitorFeed.innerHTML = `<div class="feed-item placeholder"><span class="timestamp">${new Date().toLocaleTimeString()}</span><span class="event-text">Initiated script clearance pipeline for ${escapeHtml(filename)}...</span></div>`;
     }
 
-    // Display Fail-Loud Error Banner
+    // TASK D: Parse Raw Exception Payloads into Clean Human-Readable Summaries
+    function parseErrorMessage(rawError) {
+        if (!rawError) return { title: "Clearance Pipeline Error", summary: "An unexpected error occurred during execution." };
+        const str = typeof rawError === "string" ? rawError : JSON.stringify(rawError);
+
+        // 429 Quota Exhausted
+        if (str.includes("429") || str.includes("RESOURCE_EXHAUSTED")) {
+            const retryMatch = str.match(/retry in\s+([0-9.]+\s*s|[0-9.]+\s*seconds)/i);
+            const retryStr = retryMatch ? ` Please retry in ${retryMatch[1]}.` : "";
+            return {
+                title: "Gemini API Quota Exhausted (429)",
+                summary: `The request rate limit for the configured Gemini model was exceeded.${retryStr}`
+            };
+        }
+
+        // 503 / 502 Upstream Service Errors
+        if (str.includes("503") || str.includes("UNAVAILABLE")) {
+            return {
+                title: "Google AI Service Temporarily Unavailable (503)",
+                summary: "Gemini model is currently experiencing high demand. Please try again shortly."
+            };
+        }
+
+        if (str.includes("PARALLEL_API_KEY")) {
+            return {
+                title: "Parallel API Credential Error",
+                summary: "PARALLEL_API_KEY is not configured or is invalid. Set a valid API key in .env."
+            };
+        }
+
+        return {
+            title: "Pipeline Execution Error",
+            summary: str.length > 180 ? str.slice(0, 180) + "..." : str
+        };
+    }
+
+    // TASK C: Synchronize Left Screenplay Panel & Right Clearance Panel on Error
     function showErrorBanner(filename, hash, errorMsg) {
         currentReport = null;
+        const parsed = parseErrorMessage(errorMsg);
+
+        // Left Panel Sync: Clear progress spinner & update hash tag
+        scriptFilename.textContent = filename || "script.txt";
+        scriptHash.textContent = hash ? `Hash: ${hash}` : "FAILED";
+        scriptContent.innerHTML = `
+            <div class="empty-state error">
+                <p style="color: var(--risk-red); font-weight: 700; font-size: 15px;">❌ SCREENPLAY ANALYSIS FAILED</p>
+                <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">Pipeline execution halted. Zero substitute or fallback data generated.</p>
+            </div>`;
+
+        // Right Panel Sync: Update Radar status and metric counters
         radarStatus.textContent = "RUN INCOMPLETE";
         radarStatus.className = "radar-status error";
+
+        metricTotal.textContent = "0";
+        metricRed.textContent = "0";
+        metricAmber.textContent = "0";
+        metricGreen.textContent = "0";
 
         errorBannerWrapper.style.display = "block";
         errorBannerWrapper.innerHTML = `
             <div class="error-banner">
-                <h4>⚠️ ANALYSIS FAILED / RUN INCOMPLETE</h4>
-                <p>The clearance pipeline encountered an unrecoverable error during execution. <strong>Zero substitute or fallback data was generated.</strong></p>
-                <div style="margin-top: 6px; font-family: var(--font-mono); font-size: 11px; opacity: 0.9;">
+                <h4>⚠️ ${escapeHtml(parsed.title)}</h4>
+                <p style="margin-bottom: 8px;">${escapeHtml(parsed.summary)}</p>
+                <div style="font-family: var(--font-mono); font-size: 11px; opacity: 0.9; margin-bottom: 8px;">
                     <span>Target File: <strong>${escapeHtml(filename)}</strong></span> | 
                     <span>Run Hash: <strong>${escapeHtml(hash || "N/A")}</strong></span>
                 </div>
-                <div class="error-details">${escapeHtml(errorMsg)}</div>
+                <details class="error-trace-details">
+                    <summary style="cursor: pointer; font-size: 11px; font-family: var(--font-mono); color: var(--accent-blue);">
+                        🔍 Click to view technical error payload
+                    </summary>
+                    <div class="error-details" style="margin-top: 6px;">${escapeHtml(errorMsg)}</div>
+                </details>
             </div>`;
 
         pluginWorkspace.innerHTML = `
@@ -79,7 +137,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 <p style="color: var(--risk-red);">❌ Clearance run incomplete. Fix the underlying credential/API error and resubmit.</p>
             </div>`;
 
-        addFeedLog(`🚨 PIPELINE ERROR: ${errorMsg}`);
+        addFeedLog(`🚨 PIPELINE ERROR: ${parsed.title} — ${parsed.summary}`);
     }
 
     // Run Demo Scene (Explicit Demo Action Only)
@@ -282,12 +340,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
         let basisHtml = "";
         finding.basis.forEach(b => {
-            const confPct = Math.round(b.confidence * 100);
+            const confTag = b.confidence !== null && b.confidence !== undefined 
+                ? `<span class="confidence-tag"> (${Math.round(b.confidence * 100)}% Confidence)</span>` 
+                : "";
+
             basisHtml += `
             <div class="basis-item">
                 <div class="basis-reasoning">${escapeHtml(b.reasoning)}</div>
                 <a href="${b.url}" target="_blank" rel="noopener" class="basis-link">🔗 Citation: ${escapeHtml(b.url)}</a>
-                <span class="confidence-tag"> (${confPct}% Confidence)</span>
+                ${confTag}
             </div>`;
         });
 

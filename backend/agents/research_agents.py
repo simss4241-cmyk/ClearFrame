@@ -1,25 +1,15 @@
-import datetime
-import uuid
+import logging
+from typing import List, Dict
 from backend.models.clearance import Element, Finding
-from backend.tools.parallel_tools import deep_research_element_parallel
+from backend.tools.parallel_tools import batch_research_elements_parallel
+
+logger = logging.getLogger("clearframe.research")
 
 
-def conduct_department_research(element: Element) -> Finding:
+def conduct_department_research_batch(elements: List[Element]) -> Dict[str, Finding]:
     """
-    Executes Parallel research for an extracted script element.
-    Passes full Element model to deep_research_element_parallel.
-    Zero risk rating or severity assignment in this step.
+    Executes grounded research for a batch of elements.
+    Interleaves Parallel Search calls, then sends ONE batch Gemini request.
+    Returns mapping of element_id -> Finding.
     """
-    res = deep_research_element_parallel(element)
-
-    finding = Finding(
-        id=f"find_{uuid.uuid4().hex[:8]}",
-        element_id=element.id,
-        department=element.department,
-        facts=res["facts"],
-        basis=res["basis"],
-        parallel_search_id=res.get("parallel_search_id"),
-        researched_at=datetime.datetime.now(datetime.timezone.utc).isoformat()
-    )
-
-    return finding
+    return batch_research_elements_parallel(elements)

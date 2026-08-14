@@ -1,71 +1,53 @@
 import os
-from typing import Any
-from dotenv import load_dotenv
+import logging
+from typing import Optional
+from google import genai
+from parallel import Parallel
 
-# Load .env variables into environment
-load_dotenv()
-
-try:
-    from google import genai
-except ImportError:
-    genai = None
-
-try:
-    from parallel import Parallel
-except ImportError:
-    Parallel = None
+logger = logging.getLogger("clearframe.clients")
 
 
-def get_gemini_client() -> Any:
+def get_gemini_client() -> genai.Client:
     """
-    Resolves Gemini Client via google-genai SDK.
-    Supports Vertex AI (GOOGLE_GENAI_USE_VERTEXAI=true + GOOGLE_CLOUD_PROJECT)
-    or Direct Gemini API Key (GEMINI_API_KEY or GOOGLE_API_KEY).
-    Fails loudly if neither is configured.
+    Resolves Google Cloud Gemini Client.
+    Supports Vertex AI (ADC) or Direct API Key via GEMINI_API_KEY.
+    FAIL-LOUD COMPLIANCE: If Vertex AI is requested but GOOGLE_CLOUD_PROJECT is unset
+    or placeholder, raises a fast RuntimeError instead of silent fallback.
     """
-    if genai is None:
-        raise RuntimeError("google-genai package is not installed.")
+    use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "false").lower() == "true"
+    project = os.getenv("GOOGLE_CLOUD_PROJECT")
+    location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+    api_key = os.getenv("GEMINI_API_KEY")
 
-    use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").lower() == "true"
     if use_vertex:
-        project = os.getenv("GOOGLE_CLOUD_PROJECT")
-        location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
-        if not project or project == "your-project-id":
-            # Fallback to API Key if Vertex project ID is unconfigured placeholder
-            key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-            if key:
-                return genai.Client(api_key=key)
+        if not project or project.strip() == "" or project == "your-gcp-project-id":
             raise RuntimeError(
-                "GOOGLE_GENAI_USE_VERTEXAI=true but GOOGLE_CLOUD_PROJECT is unset or placeholder."
+                "GOOGLE_GENAI_USE_VERTEXAI is set to true, but GOOGLE_CLOUD_PROJECT is unset or placeholder. "
+                "Set a valid GCP project ID or set GOOGLE_GENAI_USE_VERTEXAI=false to use GEMINI_API_KEY."
             )
-        return genai.Client(
-            vertexai=True,
-            project=project,
-            location=location,
-        )
+        logger.info(f"Initializing Gemini Client via Vertex AI (project={project}, location={location})")
+        return genai.Client(vertexai=True, project=project, location=location)
 
-    key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if not key:
-        raise RuntimeError(
-            "Gemini client initialization failed: Neither Vertex AI nor GEMINI_API_KEY is configured."
-        )
-    return genai.Client(api_key=key)
+    if api_key and api_key.strip():
+        logger.info("Initializing Gemini Client via direct API Key.")
+        return genai.Client(api_key=api_key.strip())
+
+    raise RuntimeError(
+        "No valid Google Cloud AI credentials found. "
+        "Provide GEMINI_API_KEY in .env or configure Vertex AI (GOOGLE_GENAI_USE_VERTEXAI=true)."
+    )
 
 
-def get_parallel_client() -> Any:
+def get_parallel_client() -> Parallel:
     """
-    Resolves Parallel Client via parallel-web SDK.
-    Fails loudly if PARALLEL_API_KEY is missing.
+    Resolves Parallel SDK Client.
+    FAIL-LOUD COMPLIANCE: Raises RuntimeError if PARALLEL_API_KEY is missing.
     """
-    if Parallel is None:
-        raise RuntimeError("parallel-web package is not installed.")
+    api_key = os.getenv("PARALLEL_API_KEY")
+    if not api_key or not api_key.strip():
+        raise RuntimeError("PARALLEL_API_KEY is not configured in environment or .env file.")
 
-    key = os.getenv("PARALLEL_API_KEY")
-    if not key:
-        raise RuntimeError(
-            "Parallel client initialization failed: PARALLEL_API_KEY is missing."
-        )
-    return Parallel(api_key=key)
+    return Parallel(api_key=api_key.strip())
 
 
 def get_gemini_model_name() -> str:

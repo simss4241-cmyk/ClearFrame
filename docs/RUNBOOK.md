@@ -249,3 +249,22 @@ echo -n "your-key" | gcloud secrets create parallel-api-key --data-file=-
 `--allow-unauthenticated` is required — the hosted URL must be reachable by judges without a login.
 
 The Cloud Run URL becomes `PUBLIC_BASE_URL`, and the Parallel Monitor webhook target is `$PUBLIC_BASE_URL/webhooks/monitor`. Monitor can't reach `localhost`, so the webhook half of the project can only be tested once deployed — factor that into the schedule.
+
+---
+
+## 9. Model Harmonization & Quota Architecture
+
+### Standardized Model: `gemini-3.1-flash-lite`
+All configuration files (`.env`, `.env.example`, `backend/clients.py`) standardize on `GEMINI_MODEL=gemini-3.1-flash-lite`. Model-hopping across files is prohibited.
+
+### 3-Call Quota Optimization
+To remain cleanly within Gemini Free Tier limits (20 requests/day per model) during development and testing:
+1. **Intake Phase**: 1 call (`parse_script_scenes`)
+2. **Extraction Phase**: 1 call (`extract_clearable_elements`)
+3. **Batch Research Phase**: 1 call (`batch_research_elements_parallel`) containing Parallel search excerpts mapped per `element_id`.
+
+Total Gemini spend per clearance run is **3 API calls** regardless of element count.
+
+### Process Restart Protocol
+Any modification to `.env` or files under `backend/` requires a full process kill and relaunch of the server (`uvicorn backend.api.main:app`). Never test against a running process after backend edits.
+

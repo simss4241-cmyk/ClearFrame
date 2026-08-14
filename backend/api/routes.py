@@ -11,7 +11,7 @@ from backend.models.clearance import (
 )
 from backend.agents.intake_agent import parse_script_scenes
 from backend.agents.extraction_agent import extract_clearable_elements
-from backend.agents.research_agents import conduct_department_research
+from backend.agents.research_agents import conduct_department_research_batch
 from backend.risk.engine import evaluate_risk
 from backend.agents.watch_agent import register_parallel_monitors
 from backend.db import storage
@@ -23,13 +23,15 @@ def run_full_clearance_pipeline(script_text: str, filename: str = "script.txt", 
     script_id = f"scr_{uuid.uuid4().hex[:8]}"
     script_hash = hashlib.sha256(script_text.encode("utf-8")).hexdigest()[:12]
 
-    # Step 1: Intake & Scene Parsing via Gemini
+    # Step 1: Intake & Scene Parsing via Gemini (Gemini Call 1)
     scenes = parse_script_scenes(script_text, script_id)
 
-    # Step 2: Element Extraction across 6 Department Plugins via Gemini
+    # Step 2: Element Extraction across 6 Department Plugins via Gemini (Gemini Call 2)
     elements = extract_clearable_elements(scenes, script_id)
 
-    # Step 3: Grounded Research via Parallel Search & Deterministic Risk Scoring
+    # Step 3: Grounded Research via Parallel Search & Single Batch Gemini Call (Gemini Call 3)
+    findings_map = conduct_department_research_batch(elements)
+
     dept_summaries: Dict[str, DepartmentSummary] = {
         dept.value: DepartmentSummary(department=dept) for dept in Department
     }
@@ -43,12 +45,12 @@ def run_full_clearance_pipeline(script_text: str, filename: str = "script.txt", 
     for element in elements:
         element.quoted_source_passage = element.context_snippet
 
-        # Grounded research via Parallel Search/Task (real URLs strictly)
-        finding = conduct_department_research(element)
+        finding = findings_map.get(element.id)
+        citations = [b.url for b in finding.basis] if finding else []
+        facts = finding.facts if finding else None
 
         # Department-Scoped Deterministic Risk Scoring (Plain Python Rule Engine)
-        citations = [b.url for b in finding.basis]
-        verdict = evaluate_risk(element, finding.facts, citations)
+        verdict = evaluate_risk(element, facts, citations)
 
         item_report = ElementReport(
             element=element,
@@ -75,7 +77,7 @@ def run_full_clearance_pipeline(script_text: str, filename: str = "script.txt", 
             total_green += 1
 
     # Step 4: Register Parallel Monitors for RED/AMBER items
-    register_parallel_monitors(element_reports)
+    monitors = register_parallel_monitors(element_reports)
 
     report = ClearanceReport(
         script_id=script_id,
@@ -84,6 +86,7 @@ def run_full_clearance_pipeline(script_text: str, filename: str = "script.txt", 
         title=title,
         scenes=scenes,
         departments=dept_summaries,
+        monitors=monitors,
         total_elements=len(elements),
         red_count=total_red,
         amber_count=total_amber,
