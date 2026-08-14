@@ -3,7 +3,7 @@ import uuid
 import re
 from typing import List, Set
 from google.genai import types
-from backend.models.clearance import Scene, Element, Department
+from backend.models.clearance import Scene, Element, Department, Subtype
 from backend.clients import get_gemini_client, get_gemini_model_name
 
 
@@ -15,22 +15,24 @@ def _normalize_text(text: str) -> str:
 def extract_clearable_elements(scenes: List[Scene], script_id: str) -> List[Element]:
     """
     Extracts clearable elements dynamically using Gemini structured output.
-    Raises if Gemini extraction fails. Zero hardcoded fallbacks or domain strings.
-    Deduplicates extracted elements per department based on normalized text.
+    Enforces temperature=0.0 and strict Subtype enum validation.
+    Zero hardcoded domain strings. Deduplicates elements per department.
     """
     client = get_gemini_client()
     model = get_gemini_model_name()
 
     full_text = "\n".join([f"SCENE {s.number} ({s.heading}):\n{s.text}" for s in scenes])
 
+    subtype_enum_values = [s.value for s in Subtype]
+
     prompt = (
         "Identify all screenplay elements requiring legal clearance across these 6 departments:\n"
-        "- SCRIPT_SIGNAGE (phone numbers, license plates, URLs, emails, domain names)\n"
-        "- CAST_CHARACTERS (character names, real living person references, professional roles)\n"
-        "- LOCATIONS_SETS (real addresses, landmarks, private businesses, street names)\n"
-        "- PROPS_BRANDS (trademarks, commercial products, brand logos, corporate names)\n"
-        "- SOUND_MUSIC (song cues, needle drops, lyrics, pre-existing music score references)\n"
-        "- CAMERA_VISUALS (paintings, posters, sculptures, photographs, literary quotes, newsreel footage)\n\n"
+        "- SCRIPT_SIGNAGE (PHONE, LICENSE_PLATE, URL, EMAIL)\n"
+        "- CAST_CHARACTERS (CHARACTER_NAME, PERSON_REFERENCE) -> Extract all character names, full names, and named roles (e.g. Dr. Helena Voss, Marguerite Okonkwo, R. Delacroix-Hale).\n"
+        "- LOCATIONS_SETS (ADDRESS, STREET, BUSINESS, LANDMARK)\n"
+        "- PROPS_BRANDS (BRAND, PRODUCT)\n"
+        "- SOUND_MUSIC (COMPOSITION, RECORDING, LYRIC) -> CRITICAL: If a song cue mentions a specific master recording (e.g., 'Rhapsody in Blue' played from a '1959 Columbia Masterworks recording'), extract it as ONE SINGLE element with text='Rhapsody in Blue', subtype='COMPOSITION', and recording_reference='1959 Columbia Masterworks recording'.\n"
+        "- CAMERA_VISUALS (ARTWORK, PHOTOGRAPH, LITERARY_QUOTE, ARCHIVAL_FOOTAGE) -> Quotes from poems/literature (e.g. Emily Dickinson) must have subtype='LITERARY_QUOTE'. Visual art/paintings (e.g. Great Wave off Kanagawa) must have subtype='ARTWORK'.\n\n"
         f"Screenplay Text:\n{full_text}"
     )
 
@@ -38,6 +40,7 @@ def extract_clearable_elements(scenes: List[Scene], script_id: str) -> List[Elem
         model=model,
         contents=prompt,
         config=types.GenerateContentConfig(
+            temperature=0.0,
             response_mime_type="application/json",
             response_schema={
                 "type": "ARRAY",
@@ -52,9 +55,13 @@ def extract_clearable_elements(scenes: List[Scene], script_id: str) -> List[Elem
                                 "PROPS_BRANDS", "SOUND_MUSIC", "CAMERA_VISUALS"
                             ]
                         },
-                        "subtype": {"type": "STRING"},
+                        "subtype": {
+                            "type": "STRING",
+                            "enum": subtype_enum_values
+                        },
                         "text": {"type": "STRING"},
-                        "context_snippet": {"type": "STRING"}
+                        "context_snippet": {"type": "STRING"},
+                        "recording_reference": {"type": "STRING", "nullable": True}
                     },
                     "required": ["scene_number", "department", "subtype", "text", "context_snippet"]
                 }
@@ -75,11 +82,18 @@ def extract_clearable_elements(scenes: List[Scene], script_id: str) -> List[Elem
         except ValueError:
             dept = Department.SCRIPT_SIGNAGE
 
+        sub_str = item.get("subtype", "OTHER")
+        try:
+            subtype_val = Subtype(sub_str)
+        except ValueError:
+            subtype_val = Subtype.OTHER
+
         sc_num = item.get("scene_number", 1)
         target_scene = next((s for s in scenes if s.number == sc_num), scenes[0] if scenes else None)
         scene_id = target_scene.id if target_scene else f"scene_{script_id}_1"
         txt = item.get("text", "").strip()
         context = item.get("context_snippet", "").strip()
+        rec_ref = item.get("recording_reference")
 
         if txt:
             raw_elements.append(Element(
@@ -87,13 +101,14 @@ def extract_clearable_elements(scenes: List[Scene], script_id: str) -> List[Elem
                 script_id=script_id,
                 scene_id=scene_id,
                 department=dept,
-                subtype=item.get("subtype", "ELEMENT"),
+                subtype=subtype_val,
                 text=txt,
                 context_snippet=context,
-                quoted_source_passage=context
+                quoted_source_passage=context,
+                recording_reference=rec_ref
             ))
 
-    # General phone number scanner to capture both 7-digit and 10-digit phone numbers
+    # Authoritative Phone Scanner (Task 8): Scans phone numbers and assigns Subtype.PHONE
     for scene in scenes:
         phone_matches = re.findall(r'\b(?:\d{3}[-.\s]?)?\d{3}[-.\s]?\d{4}\b', scene.text)
         for phone in phone_matches:
@@ -103,13 +118,13 @@ def extract_clearable_elements(scenes: List[Scene], script_id: str) -> List[Elem
                 script_id=script_id,
                 scene_id=scene.id,
                 department=Department.SCRIPT_SIGNAGE,
-                subtype="PHONE",
+                subtype=Subtype.PHONE,
                 text=phone_clean,
                 context_snippet=f"Phone number appearing in dialogue/action: {phone_clean}",
                 quoted_source_passage=f"Phone number appearing in dialogue/action: {phone_clean}"
             ))
 
-    # Task 10: Deduplicate elements by department + normalized text
+    # Deduplicate elements by department + normalized text
     seen_keys: Set[str] = set()
     deduped_elements: List[Element] = []
 

@@ -7,6 +7,7 @@ from backend.risk.rules import (
     rule_loc_001,
     rule_prp_001,
     rule_vis_001, rule_vis_002,
+    rule_lit_001, rule_lit_002,
     create_verdict
 )
 
@@ -17,7 +18,7 @@ DEPARTMENT_RULES: Dict[Department, List[Callable[[Element, Facts, List[str]], Op
     Department.CAST_CHARACTERS: [rule_cas_001],
     Department.LOCATIONS_SETS: [rule_loc_001],
     Department.PROPS_BRANDS: [rule_prp_001],
-    Department.CAMERA_VISUALS: [rule_vis_001, rule_vis_002],
+    Department.CAMERA_VISUALS: [rule_vis_001, rule_vis_002, rule_lit_001, rule_lit_002],
 }
 
 

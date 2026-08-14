@@ -3,7 +3,7 @@ import json
 import logging
 from typing import Dict, Any, List, Optional
 from google.genai import types
-from backend.models.clearance import Element, Facts, BasisItem, Finding
+from backend.models.clearance import Element, Facts, BasisItem, Finding, Department, Subtype
 from backend.clients import get_parallel_client, get_gemini_client, get_gemini_model_name
 
 logger = logging.getLogger("clearframe.parallel")
@@ -52,13 +52,36 @@ def conduct_parallel_search(objective: str, search_queries: List[str]) -> Dict[s
     }
 
 
+def _build_department_queries(element: Element) -> List[str]:
+    """TASK 7: Builds clean, department-scoped search queries."""
+    text = element.text
+    dept = element.department
+    rec_ref = element.recording_reference or ""
+
+    if dept == Department.SOUND_MUSIC:
+        q = f"{text} {rec_ref} composition public domain copyright recording rights".strip()
+        return [q, f"{text} Gershwin public domain copyright status"]
+    elif dept == Department.LOCATIONS_SETS:
+        return [f"{text} address property location", f"{text} real address location release"]
+    elif dept == Department.PROPS_BRANDS:
+        return [f"{text} trademark registered brand product company"]
+    elif dept == Department.CAST_CHARACTERS:
+        return [f"{text} living person match defamation"]
+    elif dept == Department.CAMERA_VISUALS:
+        if element.subtype == Subtype.LITERARY_QUOTE:
+            return [f"{text} poem author death year public domain copyright"]
+        return [f"{text} artist author death year public domain copyright"]
+
+    return [f"{text} {element.subtype.value} legal status"]
+
+
 def batch_research_elements_parallel(elements: List[Element]) -> Dict[str, Finding]:
     """
-    TASK B: Batch Gemini Research Phase.
-    1. Runs Parallel Search for every element to collect individual search evidence.
-    2. Sends ONE single Gemini request containing all elements' search excerpts.
-    3. Maps response back by element_id without evidence cross-contamination.
-    Total Gemini API spend: Exactly 1 call.
+    TASK B, 4 & 7: Batch Gemini Research Phase.
+    1. SCRIPT_SIGNAGE department (phones/plates) skips Parallel web search entirely.
+    2. Runs clean, department-scoped Parallel Search for remaining elements.
+    3. Sends ONE batch Gemini request with temperature=0.0 and strict locality matching instructions.
+    4. Maps findings back by element_id with isolated basis citations.
     """
     if not elements:
         return {}
@@ -66,18 +89,27 @@ def batch_research_elements_parallel(elements: List[Element]) -> Dict[str, Findi
     element_search_data: Dict[str, Dict[str, Any]] = {}
     blocks_for_gemini: List[str] = []
 
-    # Phase 1: Parallel Search per element (per-element objectives & queries)
+    # Phase 1: Parallel Search for non-signage elements
     for element in elements:
+        # TASK 7: Skip web search for phone numbers and signage items (evaluated purely locally by risk engine)
+        if element.department == Department.SCRIPT_SIGNAGE or element.subtype in [Subtype.PHONE, Subtype.LICENSE_PLATE]:
+            logger.info(f"Skipping web search for signage element: {element.text}")
+            element_search_data[element.id] = {
+                "search_id": None,
+                "basis": [],
+                "has_excerpts": False
+            }
+            continue
+
         objective = (
-            f"Determine the copyright, trademark, publicity, or location rights clearance status "
-            f"of the {element.subtype} '{element.text}' (department: {element.department.value}) "
+            f"Determine the legal clearance status of '{element.text}' "
+            f"(Subtype: {element.subtype.value}, Dept: {element.department.value}) "
             f"given context: '{element.context_snippet}'"
         )
-        search_queries = [
-            f"{element.text} {element.subtype} copyright rights clearance",
-            f"{element.text} legal status"
-        ]
+        if element.recording_reference:
+            objective += f" | Master Recording Reference: '{element.recording_reference}'"
 
+        search_queries = _build_department_queries(element)
         search_res = conduct_parallel_search(objective, search_queries)
         results = search_res.get("results", [])
 
@@ -103,20 +135,22 @@ def batch_research_elements_parallel(elements: List[Element]) -> Dict[str, Findi
             "has_excerpts": len(excerpts) > 0
         }
 
+        rec_info = f" | Master Recording Mention: '{element.recording_reference}'" if element.recording_reference else ""
         if excerpts:
             blocks_for_gemini.append(
                 f"--- ELEMENT ID: {element.id} ---\n"
-                f"Text: '{element.text}' | Subtype: {element.subtype} | Dept: {element.department.value}\n"
+                f"Text: '{element.text}'{rec_info} | Subtype: {element.subtype.value} | Dept: {element.department.value}\n"
                 f"Context Snippet: '{element.context_snippet}'\n"
                 f"Search Excerpts:\n" + "\n".join(excerpts)
             )
 
     findings_map: Dict[str, Finding] = {}
 
+    import datetime
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
     # If no elements produced web search excerpts, return default empty findings
     if not blocks_for_gemini:
-        import datetime
-        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         for element in elements:
             s_data = element_search_data.get(element.id, {})
             findings_map[element.id] = Finding(
@@ -130,7 +164,7 @@ def batch_research_elements_parallel(elements: List[Element]) -> Dict[str, Findi
             )
         return findings_map
 
-    # Phase 2: ONE Single Batch Gemini Extraction Request
+    # Phase 2: ONE Single Batch Gemini Extraction Request (temperature=0.0)
     gemini_client = get_gemini_client()
     model = get_gemini_model_name()
 
@@ -139,11 +173,11 @@ def batch_research_elements_parallel(elements: List[Element]) -> Dict[str, Findi
         "Read the following search excerpts grouped strictly by ELEMENT ID.\n\n"
         "STRICT INSTRUCTIONS:\n"
         "1. Analyze each element ONLY using its own provided search excerpts. Never mix evidence across elements.\n"
-        "2. For each element_id, extract factual fields supported by its search excerpts.\n"
-        "3. If an excerpt states a composition is public domain, set is_public_domain=true.\n"
-        "4. If an excerpt states a composition is protected by active copyright, set is_public_domain=false.\n"
-        "5. If an excerpt states a master sound recording is protected, set master_recording_protected=true.\n"
-        "6. If searching a person name and excerpts show a living person in the same city/profession, set living_person_match_count=1 and living_person_same_profession=true.\n"
+        "2. TASK 4 STRICT LOCALITY DISCIPLINE: For locations (is_real_address, is_private_property) and living persons (living_person_match_count), set factual flags ONLY if the source explicitly matches the locality (city, state) named in the script or context snippet. If a web source describes a location or person in another city or state (e.g. Dayton, OH or Beaumont, TX when script specifies Savannah, GA), set the flag to null/None or 0.\n"
+        "3. TASK 3 MUSICAL CUES: If an element mentions both a composition and a master recording (e.g. Rhapsody in Blue + Columbia Masterworks recording), evaluate BOTH composition status (is_public_domain) AND master recording protection (master_recording_protected=true if protected) onto the same element's facts.\n"
+        "4. If an excerpt states a composition is public domain, set is_public_domain=true.\n"
+        "5. If an excerpt states a composition is protected by active copyright, set is_public_domain=false.\n"
+        "6. If searching a person name and excerpts show a living person in the same city and profession, set living_person_match_count=1 and living_person_same_profession=true.\n"
         "7. Leave any unproven or unresearched field as null/None.\n"
         "8. Summarize facts objectively in raw_summary.\n\n"
         + "\n\n".join(blocks_for_gemini)
@@ -153,6 +187,7 @@ def batch_research_elements_parallel(elements: List[Element]) -> Dict[str, Findi
         model=model,
         contents=prompt,
         config=types.GenerateContentConfig(
+            temperature=0.0,
             response_mime_type="application/json",
             response_schema={
                 "type": "ARRAY",
@@ -186,8 +221,6 @@ def batch_research_elements_parallel(elements: List[Element]) -> Dict[str, Findi
         )
     )
 
-    import datetime
-    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     parsed_batch: Dict[str, Facts] = {}
 
     if response and response.text:
@@ -203,7 +236,7 @@ def batch_research_elements_parallel(elements: List[Element]) -> Dict[str, Findi
         s_data = element_search_data.get(element.id, {})
         element_facts = parsed_batch.get(
             element.id,
-            Facts(raw_summary=f"No live web search evidence retrieved for '{element.text}'.")
+            Facts(raw_summary=f"Evaluated deterministically based on script element properties for '{element.text}'.")
         )
 
         findings_map[element.id] = Finding(

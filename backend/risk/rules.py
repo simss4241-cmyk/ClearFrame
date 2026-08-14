@@ -2,7 +2,7 @@ import re
 import datetime
 import uuid
 from typing import Optional, List
-from backend.models.clearance import Element, Facts, Verdict, RiskRating, Department
+from backend.models.clearance import Element, Facts, Verdict, RiskRating, Department, Subtype
 
 
 def is_555_fictional_range(phone_text: str) -> bool:
@@ -86,8 +86,8 @@ def rule_mus_003(element: Element, facts: Facts, citations: List[str]) -> Option
 # Department: SCRIPT_SIGNAGE
 # ----------------------------------------------------
 def rule_sig_001(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
-    """SIG-001: Phone number outside reserved 555 range."""
-    if element.subtype == "PHONE":
+    """SIG-001: Phone number outside reserved 555 range (Subtype.PHONE)."""
+    if element.subtype == Subtype.PHONE:
         if facts.is_555_range is False or (facts.is_555_range is None and not is_555_fictional_range(element.text)):
             return create_verdict(
                 element=element,
@@ -100,8 +100,8 @@ def rule_sig_001(element: Element, facts: Facts, citations: List[str]) -> Option
 
 
 def rule_sig_002(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
-    """SIG-002: Phone number inside reserved 555 range."""
-    if element.subtype == "PHONE":
+    """SIG-002: Phone number inside reserved 555 range (Subtype.PHONE)."""
+    if element.subtype == Subtype.PHONE:
         if facts.is_555_range is True or (facts.is_555_range is None and is_555_fictional_range(element.text)):
             return create_verdict(
                 element=element,
@@ -163,31 +163,61 @@ def rule_prp_001(element: Element, facts: Facts, citations: List[str]) -> Option
 
 
 # ----------------------------------------------------
-# Department: CAMERA_VISUALS
+# Department: CAMERA_VISUALS (Visual Art & Literary Quotes)
 # ----------------------------------------------------
 def rule_vis_001(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
     """VIS-001: Visual artwork under active copyright protection."""
-    current_year = datetime.datetime.now(datetime.timezone.utc).year
-    if facts.is_public_domain is False or (facts.copyright_expiration_year and facts.copyright_expiration_year > current_year):
-        exp = f" (expires {facts.copyright_expiration_year})" if facts.copyright_expiration_year else ""
-        return create_verdict(
-            element=element,
-            rating=RiskRating.AMBER,
-            rule_id="VIS-001",
-            rationale=f"Featured artwork is protected by active copyright{exp}. Permission required from estate/rights administrator.",
-            citations=citations
-        )
+    if element.subtype in [Subtype.ARTWORK, Subtype.PHOTOGRAPH, Subtype.OTHER]:
+        current_year = datetime.datetime.now(datetime.timezone.utc).year
+        if facts.is_public_domain is False or (facts.copyright_expiration_year and facts.copyright_expiration_year > current_year):
+            exp = f" (expires {facts.copyright_expiration_year})" if facts.copyright_expiration_year else ""
+            return create_verdict(
+                element=element,
+                rating=RiskRating.AMBER,
+                rule_id="VIS-001",
+                rationale=f"Featured artwork is protected by active copyright{exp}. Permission required from estate/rights administrator.",
+                citations=citations
+            )
     return None
 
 
 def rule_vis_002(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
     """VIS-002: Visual artwork in public domain."""
-    if facts.is_public_domain is True:
-        return create_verdict(
-            element=element,
-            rating=RiskRating.GREEN,
-            rule_id="VIS-002",
-            rationale="Artwork is in the public domain.",
-            citations=citations
-        )
+    if element.subtype in [Subtype.ARTWORK, Subtype.PHOTOGRAPH]:
+        if facts.is_public_domain is True:
+            return create_verdict(
+                element=element,
+                rating=RiskRating.GREEN,
+                rule_id="VIS-002",
+                rationale="Visual artwork is in the public domain.",
+                citations=citations
+            )
+    return None
+
+
+def rule_lit_001(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
+    """LIT-001: Literary quote / poetry under active copyright."""
+    if element.subtype == Subtype.LITERARY_QUOTE:
+        if facts.is_public_domain is False:
+            return create_verdict(
+                element=element,
+                rating=RiskRating.AMBER,
+                rule_id="LIT-001",
+                rationale="Literary excerpt or poem is protected by active copyright. Synchronization / print clearance required.",
+                citations=citations
+            )
+    return None
+
+
+def rule_lit_002(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
+    """LIT-002: Literary quote / poetry in public domain."""
+    if element.subtype == Subtype.LITERARY_QUOTE:
+        if facts.is_public_domain is True:
+            return create_verdict(
+                element=element,
+                rating=RiskRating.GREEN,
+                rule_id="LIT-002",
+                rationale="Literary work or poem is in the public domain.",
+                citations=citations
+            )
     return None

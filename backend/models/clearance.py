@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import List, Optional, Dict
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class Department(str, Enum):
@@ -10,6 +10,42 @@ class Department(str, Enum):
     PROPS_BRANDS = "PROPS_BRANDS"
     SOUND_MUSIC = "SOUND_MUSIC"
     CAMERA_VISUALS = "CAMERA_VISUALS"
+
+
+class Subtype(str, Enum):
+    # SCRIPT_SIGNAGE
+    PHONE = "PHONE"
+    LICENSE_PLATE = "LICENSE_PLATE"
+    URL = "URL"
+    EMAIL = "EMAIL"
+
+    # CAST_CHARACTERS
+    CHARACTER_NAME = "CHARACTER_NAME"
+    PERSON_REFERENCE = "PERSON_REFERENCE"
+
+    # LOCATIONS_SETS
+    ADDRESS = "ADDRESS"
+    STREET = "STREET"
+    BUSINESS = "BUSINESS"
+    LANDMARK = "LANDMARK"
+
+    # PROPS_BRANDS
+    BRAND = "BRAND"
+    PRODUCT = "PRODUCT"
+
+    # SOUND_MUSIC
+    COMPOSITION = "COMPOSITION"
+    RECORDING = "RECORDING"
+    LYRIC = "LYRIC"
+
+    # CAMERA_VISUALS
+    ARTWORK = "ARTWORK"
+    PHOTOGRAPH = "PHOTOGRAPH"
+    LITERARY_QUOTE = "LITERARY_QUOTE"
+    ARCHIVAL_FOOTAGE = "ARCHIVAL_FOOTAGE"
+
+    # FALLBACK
+    OTHER = "OTHER"
 
 
 class RiskRating(str, Enum):
@@ -30,10 +66,41 @@ class Element(BaseModel):
     script_id: str
     scene_id: str
     department: Department
-    subtype: str
+    subtype: Subtype = Subtype.OTHER
     text: str
     context_snippet: str
     quoted_source_passage: str = ""
+    recording_reference: Optional[str] = None
+
+    @field_validator("subtype", mode="before")
+    @classmethod
+    def validate_subtype(cls, v):
+        if isinstance(v, Subtype):
+            return v
+        if isinstance(v, str):
+            v_clean = v.strip().upper().replace(" ", "_")
+            mapping = {
+                "PHONE_NUMBER": Subtype.PHONE,
+                "CHARACTER_NAME": Subtype.CHARACTER_NAME,
+                "REAL_ADDRESS": Subtype.ADDRESS,
+                "PRIVATE_BUSINESS": Subtype.BUSINESS,
+                "TRADEMARK": Subtype.BRAND,
+                "COMMERCIAL_PRODUCT": Subtype.PRODUCT,
+                "SONG_CUE": Subtype.COMPOSITION,
+                "RECORDING/COPYRIGHT_REFERENCE": Subtype.RECORDING,
+                "PAINTING": Subtype.ARTWORK,
+                "ART": Subtype.ARTWORK,
+                "STREET_NAME": Subtype.STREET,
+                "DOMAIN_NAME": Subtype.URL,
+                "LITERARY_REFERENCE": Subtype.LITERARY_QUOTE,
+            }
+            if v_clean in mapping:
+                return mapping[v_clean]
+            try:
+                return Subtype(v_clean)
+            except ValueError:
+                return Subtype.OTHER
+        return Subtype.OTHER
 
 
 class BasisItem(BaseModel):
