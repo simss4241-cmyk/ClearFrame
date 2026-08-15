@@ -15,7 +15,7 @@ def parse_script_scenes(script_text: str, script_id: str) -> List[Scene]:
 
     prompt = (
         "Parse the following screenplay text into structured scenes. "
-        "Extract scene numbers, scene headings (e.g. EXT. SAVANNAH - DUSK), and the verbatim text under each scene.\n\n"
+        "Extract scene numbers, scene headings (e.g. EXT. LOCATION - TIME), and the verbatim text under each scene.\n\n"
         f"Screenplay Text:\n{script_text}"
     )
 

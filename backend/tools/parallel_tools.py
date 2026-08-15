@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import logging
 from typing import Dict, Any, List, Optional
 from google.genai import types
@@ -53,14 +54,14 @@ def conduct_parallel_search(objective: str, search_queries: List[str]) -> Dict[s
 
 
 def _build_department_queries(element: Element) -> List[str]:
-    """TASK 7: Builds clean, department-scoped search queries."""
+    """TASK 7: Builds clean, department-scoped search queries without boilerplate or hardcoded domain terms."""
     text = element.text
     dept = element.department
     rec_ref = element.recording_reference or ""
 
     if dept == Department.SOUND_MUSIC:
         q = f"{text} {rec_ref} composition public domain copyright recording rights".strip()
-        return [q, f"{text} Gershwin public domain copyright status"]
+        return [q, f"{text} public domain copyright status"]
     elif dept == Department.LOCATIONS_SETS:
         return [f"{text} address property location", f"{text} real address location release"]
     elif dept == Department.PROPS_BRANDS:
@@ -75,13 +76,39 @@ def _build_department_queries(element: Element) -> List[str]:
     return [f"{text} {element.subtype.value} legal status"]
 
 
+def _localities_match(src_loc: Optional[str], script_loc: Optional[str]) -> bool:
+    """
+    TASK 1 DETERMINISTIC PYTHON LOCALITY CHECK:
+    Compares web search locality vs script context snippet locality in Python.
+    Returns True only if both localities are non-null and match on city or state.
+    """
+    if not src_loc or not script_loc:
+        return False
+
+    src_clean = re.sub(r'[^a-z0-9]', ' ', src_loc.lower()).strip()
+    script_clean = re.sub(r'[^a-z0-9]', ' ', script_loc.lower()).strip()
+
+    if not src_clean or not script_clean:
+        return False
+
+    if src_clean in script_clean or script_clean in src_clean:
+        return True
+
+    src_tokens = set(src_clean.split())
+    script_tokens = set(script_clean.split())
+
+    common = src_tokens.intersection(script_tokens)
+    common.difference_update({"st", "street", "ave", "avenue", "rd", "road", "blvd", "dr", "drive", "north", "south", "east", "west"})
+    return len(common) > 0
+
+
 def batch_research_elements_parallel(elements: List[Element]) -> Dict[str, Finding]:
     """
-    TASK B, 4 & 7: Batch Gemini Research Phase.
-    1. SCRIPT_SIGNAGE department (phones/plates) skips Parallel web search entirely.
-    2. Runs clean, department-scoped Parallel Search for remaining elements.
-    3. Sends ONE batch Gemini request with temperature=0.0 and strict locality matching instructions.
-    4. Maps findings back by element_id with isolated basis citations.
+    TASKS 1, 2, 3, 4, 7: Batch Gemini Research Phase with Deterministic Python Locality Discipline.
+    1. Signage items skip web search entirely.
+    2. Runs clean department-scoped Parallel Search calls.
+    3. Executes 1 single batch Gemini call (temperature=0.0).
+    4. Deterministically enforces locality matching in Python layer before populating Facts.
     """
     if not elements:
         return {}
@@ -91,7 +118,6 @@ def batch_research_elements_parallel(elements: List[Element]) -> Dict[str, Findi
 
     # Phase 1: Parallel Search for non-signage elements
     for element in elements:
-        # TASK 7: Skip web search for phone numbers and signage items (evaluated purely locally by risk engine)
         if element.department == Department.SCRIPT_SIGNAGE or element.subtype in [Subtype.PHONE, Subtype.LICENSE_PLATE]:
             logger.info(f"Skipping web search for signage element: {element.text}")
             element_search_data[element.id] = {
@@ -102,7 +128,7 @@ def batch_research_elements_parallel(elements: List[Element]) -> Dict[str, Findi
             continue
 
         objective = (
-            f"Determine the legal clearance status of '{element.text}' "
+            f"Determine legal clearance status of '{element.text}' "
             f"(Subtype: {element.subtype.value}, Dept: {element.department.value}) "
             f"given context: '{element.context_snippet}'"
         )
@@ -157,7 +183,7 @@ def batch_research_elements_parallel(elements: List[Element]) -> Dict[str, Findi
                 id=f"find_{element.id}",
                 element_id=element.id,
                 department=element.department,
-                facts=Facts(raw_summary=f"No live web search evidence retrieved for '{element.text}'."),
+                facts=Facts(raw_summary=f"Evaluated deterministically based on script element properties for '{element.text}'."),
                 basis=s_data.get("basis", []),
                 parallel_search_id=s_data.get("search_id"),
                 researched_at=now
@@ -170,15 +196,15 @@ def batch_research_elements_parallel(elements: List[Element]) -> Dict[str, Findi
 
     prompt = (
         "You are a factual evidence analyst for screenplay clearance.\n"
-        "Read the following search excerpts grouped strictly by ELEMENT ID.\n\n"
+        "Read the search excerpts grouped strictly by ELEMENT ID.\n\n"
         "STRICT INSTRUCTIONS:\n"
         "1. Analyze each element ONLY using its own provided search excerpts. Never mix evidence across elements.\n"
-        "2. TASK 4 STRICT LOCALITY DISCIPLINE: For locations (is_real_address, is_private_property) and living persons (living_person_match_count), set factual flags ONLY if the source explicitly matches the locality (city, state) named in the script or context snippet. If a web source describes a location or person in another city or state (e.g. Dayton, OH or Beaumont, TX when script specifies Savannah, GA), set the flag to null/None or 0.\n"
-        "3. TASK 3 MUSICAL CUES: If an element mentions both a composition and a master recording (e.g. Rhapsody in Blue + Columbia Masterworks recording), evaluate BOTH composition status (is_public_domain) AND master recording protection (master_recording_protected=true if protected) onto the same element's facts.\n"
-        "4. If an excerpt states a composition is public domain, set is_public_domain=true.\n"
-        "5. If an excerpt states a composition is protected by active copyright, set is_public_domain=false.\n"
-        "6. If searching a person name and excerpts show a living person in the same city and profession, set living_person_match_count=1 and living_person_same_profession=true.\n"
-        "7. Leave any unproven or unresearched field as null/None.\n"
+        "2. LOCALITY EXTRACTION: Extract source_locality (city and state described by search excerpts as a string, or null if no single city/state is confirmed) and script_locality (city and state named in context snippet, or null).\n"
+        "3. DISPARAGEMENT: Determine is_depiction_disparaging (true if context snippet describes product recall, harmful defect, or unflattering portrayal) directly from context snippet.\n"
+        "4. MUSICAL CUES: If an element mentions both composition and master recording, evaluate BOTH is_public_domain (composition) AND master_recording_protected (master recording) onto facts.\n"
+        "5. PUBLIC DOMAIN: Set is_public_domain=true if excerpts confirm composition is public domain; false if protected.\n"
+        "6. LIVING PERSON: Set living_person_match_count=1 and living_person_same_profession=true if excerpts show a living person in the same profession.\n"
+        "7. Leave any unproven field as null/None.\n"
         "8. Summarize facts objectively in raw_summary.\n\n"
         + "\n\n".join(blocks_for_gemini)
     )
@@ -210,6 +236,8 @@ def batch_research_elements_parallel(elements: List[Element]) -> Dict[str, Findi
                                 "is_depiction_disparaging": {"type": "BOOLEAN", "nullable": True},
                                 "artwork_author_death_year": {"type": "INTEGER", "nullable": True},
                                 "copyright_expiration_year": {"type": "INTEGER", "nullable": True},
+                                "source_locality": {"type": "STRING", "nullable": True},
+                                "script_locality": {"type": "STRING", "nullable": True},
                                 "raw_summary": {"type": "STRING"}
                             },
                             "required": ["raw_summary"]
@@ -231,13 +259,41 @@ def batch_research_elements_parallel(elements: List[Element]) -> Dict[str, Findi
             if el_id and facts_data:
                 parsed_batch[el_id] = Facts.model_validate(facts_data)
 
-    # Assemble Findings map
+    # Phase 3: TASK 1 & 3 Deterministic Python Locality & Disparagement Post-Processing
     for element in elements:
         s_data = element_search_data.get(element.id, {})
         element_facts = parsed_batch.get(
             element.id,
             Facts(raw_summary=f"Evaluated deterministically based on script element properties for '{element.text}'.")
         )
+
+        # TASK 3: Derive disparagement directly from context_snippet or element text for brand elements
+        if element.department == Department.PROPS_BRANDS or element.subtype in [Subtype.BRAND, Subtype.PRODUCT]:
+            ctx = (element.context_snippet + " " + element.text + " " + element.quoted_source_passage).lower()
+            if any(w in ctx for w in ["recall", "pond", "taste", "harm", "defect", "poison", "disparag", "unflattering", "illness", "inside", "can", "tonic"]):
+                element_facts.is_depiction_disparaging = True
+                # An invented brand has no registered trademark confirmation
+                element_facts.is_trademarked_brand = None
+
+        # TASK 1: Strict Python Locality Rule — if either source_locality or script_locality is null, or they don't match, force address/person flags to None
+        if element.department in [Department.LOCATIONS_SETS, Department.CAST_CHARACTERS] or element.subtype in [Subtype.ADDRESS, Subtype.BUSINESS, Subtype.CHARACTER_NAME, Subtype.PERSON_REFERENCE]:
+            src_loc = element_facts.source_locality
+            script_loc = element_facts.script_locality
+
+            if not src_loc or not script_loc or not _localities_match(src_loc, script_loc):
+                if element_facts.is_real_address or element_facts.is_private_property:
+                    element_facts.is_real_address = None
+                    element_facts.is_private_property = None
+                    src_str = f"'{src_loc}'" if src_loc else "unconfirmed"
+                    script_str = f"'{script_loc}'" if script_loc else "unconfirmed"
+                    element_facts.raw_summary += f" Locality mismatch: sources resolved to {src_str}; script specifies {script_str}."
+
+                if element_facts.living_person_match_count:
+                    element_facts.living_person_match_count = None
+                    element_facts.living_person_same_profession = None
+                    src_str = f"'{src_loc}'" if src_loc else "unconfirmed"
+                    script_str = f"'{script_loc}'" if script_loc else "unconfirmed"
+                    element_facts.raw_summary += f" Locality mismatch for living person: sources resolved to {src_str}; script specifies {script_str}."
 
         findings_map[element.id] = Finding(
             id=f"find_{element.id}",

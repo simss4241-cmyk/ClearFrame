@@ -150,13 +150,26 @@ def rule_loc_001(element: Element, facts: Facts, citations: List[str]) -> Option
 # Department: PROPS_BRANDS
 # ----------------------------------------------------
 def rule_prp_001(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
-    """PRP-001: Trademarked brand depicted disparagingly."""
+    """PRP-001: Registered trademarked brand depicted disparagingly."""
     if facts.is_trademarked_brand is True and facts.is_depiction_disparaging is True:
         return create_verdict(
             element=element,
             rating=RiskRating.AMBER,
             rule_id="PRP-001",
             rationale="Trademarked product depicted disparagingly or associated with illegal/harmful conduct. Defeats nominative fair use defense.",
+            citations=citations
+        )
+    return None
+
+
+def rule_prp_002(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
+    """PRP-002: Depiction is disparaging and no registered trademark was confirmed."""
+    if facts.is_depiction_disparaging is True and (facts.is_trademarked_brand is False or facts.is_trademarked_brand is None):
+        return create_verdict(
+            element=element,
+            rating=RiskRating.AMBER,
+            rule_id="PRP-002",
+            rationale="No registered trademark located; unregistered common-law rights cannot be ruled out, and the script depiction is unflattering or disparaging.",
             citations=citations
         )
     return None

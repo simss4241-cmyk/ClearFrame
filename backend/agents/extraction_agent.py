@@ -28,11 +28,11 @@ def extract_clearable_elements(scenes: List[Scene], script_id: str) -> List[Elem
     prompt = (
         "Identify all screenplay elements requiring legal clearance across these 6 departments:\n"
         "- SCRIPT_SIGNAGE (PHONE, LICENSE_PLATE, URL, EMAIL)\n"
-        "- CAST_CHARACTERS (CHARACTER_NAME, PERSON_REFERENCE) -> Extract all character names, full names, and named roles (e.g. Dr. Helena Voss, Marguerite Okonkwo, R. Delacroix-Hale).\n"
+        "- CAST_CHARACTERS (CHARACTER_NAME, PERSON_REFERENCE) -> Extract all character names, full names, and named roles.\n"
         "- LOCATIONS_SETS (ADDRESS, STREET, BUSINESS, LANDMARK)\n"
         "- PROPS_BRANDS (BRAND, PRODUCT)\n"
-        "- SOUND_MUSIC (COMPOSITION, RECORDING, LYRIC) -> CRITICAL: If a song cue mentions a specific master recording (e.g., 'Rhapsody in Blue' played from a '1959 Columbia Masterworks recording'), extract it as ONE SINGLE element with text='Rhapsody in Blue', subtype='COMPOSITION', and recording_reference='1959 Columbia Masterworks recording'.\n"
-        "- CAMERA_VISUALS (ARTWORK, PHOTOGRAPH, LITERARY_QUOTE, ARCHIVAL_FOOTAGE) -> Quotes from poems/literature (e.g. Emily Dickinson) must have subtype='LITERARY_QUOTE'. Visual art/paintings (e.g. Great Wave off Kanagawa) must have subtype='ARTWORK'.\n\n"
+        "- SOUND_MUSIC (COMPOSITION, RECORDING, LYRIC) -> CRITICAL: If a song cue mentions a specific master recording (e.g. a composition performed on a specific record label or master recording), extract it as ONE SINGLE element with subtype='COMPOSITION' and set recording_reference to the master recording reference string.\n"
+        "- CAMERA_VISUALS (ARTWORK, PHOTOGRAPH, LITERARY_QUOTE, ARCHIVAL_FOOTAGE) -> Quotes from poems/literature must have subtype='LITERARY_QUOTE'. Visual art/paintings must have subtype='ARTWORK'.\n\n"
         f"Screenplay Text:\n{full_text}"
     )
 
@@ -108,7 +108,7 @@ def extract_clearable_elements(scenes: List[Scene], script_id: str) -> List[Elem
                 recording_reference=rec_ref
             ))
 
-    # Authoritative Phone Scanner (Task 8): Scans phone numbers and assigns Subtype.PHONE
+    # Authoritative Phone Scanner: Scans phone numbers and assigns Subtype.PHONE
     for scene in scenes:
         phone_matches = re.findall(r'\b(?:\d{3}[-.\s]?)?\d{3}[-.\s]?\d{4}\b', scene.text)
         for phone in phone_matches:

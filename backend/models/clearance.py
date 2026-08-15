@@ -126,6 +126,8 @@ class Facts(BaseModel):
     is_depiction_disparaging: Optional[bool] = None
     artwork_author_death_year: Optional[int] = None
     copyright_expiration_year: Optional[int] = None
+    source_locality: Optional[str] = None
+    script_locality: Optional[str] = None
     raw_summary: str = ""
 
 

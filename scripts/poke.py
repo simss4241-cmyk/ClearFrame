@@ -7,6 +7,7 @@ REAL shape of every response so you can build against what actually comes back
 instead of what you assumed would.
 
     python scripts/poke.py check
+    python scripts/poke.py compliance
     python scripts/poke.py models
     python scripts/poke.py gemini "say hello"
     python scripts/poke.py search "Determine whether Rhapsody in Blue is public domain"
@@ -20,6 +21,7 @@ import argparse
 import json
 import os
 import sys
+import re
 
 try:
     from dotenv import load_dotenv
@@ -82,7 +84,7 @@ def gemini_client():
 
 
 def model_name():
-    return os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    return os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
 
 # ──────────────────────────────────────────────────────────
@@ -120,6 +122,50 @@ def cmd_check(args):
         bad(f"no ADC — run: gcloud auth application-default login  ({e})")
 
 
+def cmd_compliance(args):
+    """
+    TASK 4: Prohibition 3 Compliance Scan.
+    Checks backend/ and frontend/ for hardcoded domain content terms from all seed files.
+    """
+    head("Prohibition 3 Compliance Check")
+    forbidden_terms = [
+        "Nighthawks", "Wabash", "Pendelton", "Veloce", "Hopper",
+        "Beaumont", "Savannah", "Kestrel", "Hokusai", "Delacroix",
+        "Voss", "Okonkwo", "Rhapsody", "Dayton", "Kanagawa"
+    ]
+    pattern = re.compile("|".join(forbidden_terms), re.IGNORECASE)
+
+    root_dir = os.path.join(os.path.dirname(__file__), "..")
+    target_dirs = ["backend", "frontend"]
+
+    violations = []
+    for tdir in target_dirs:
+        path = os.path.join(root_dir, tdir)
+        if not os.path.exists(path):
+            continue
+        for root, _, files in os.walk(path):
+            for file in files:
+                if file.endswith((".py", ".js", ".html", ".css")):
+                    fpath = os.path.join(root, file)
+                    relpath = os.path.relpath(fpath, root_dir)
+                    try:
+                        with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                            for idx, line in enumerate(f, 1):
+                                m = pattern.search(line)
+                                if m:
+                                    violations.append((relpath, idx, m.group(0), line.strip()))
+                    except Exception as e:
+                        warn(f"Could not read {relpath}: {e}")
+
+    if violations:
+        bad(f"FOUND {len(violations)} PROHIBITION-3 VIOLATIONS:")
+        for relpath, line_no, term, content in violations:
+            print(f"  \033[31m{relpath}:{line_no}\033[0m -> term '{term}': {content[:80]}")
+        sys.exit(1)
+    else:
+        ok(f"CLEAN! Zero hardcoded domain literals found across backend/ and frontend/ ({len(forbidden_terms)} seed terms checked).")
+
+
 def cmd_models(args):
     """List models your project can actually reach. Settles the naming question."""
     client = gemini_client()
@@ -147,13 +193,6 @@ def cmd_gemini(args):
 
 
 def cmd_search(args):
-    """
-    The call parallel_tools.py gets wrong.
-
-    Correct signature is objective= plus search_queries=.
-    There is no `query=` parameter — passing one raises, which is why the
-    current code silently falls through to canned data.
-    """
     client = parallel_client()
     queries = args.query or [args.objective[:100]]
 
@@ -211,10 +250,6 @@ def cmd_monitors(args):
 
 
 def cmd_monitor_create(args):
-    """
-    Also wrong in watch_agent.py. There is no `cadence=`; the real shape is
-    type / frequency / processor / settings{query} / webhook.
-    """
     payload = {
         "type": "event_stream",
         "frequency": args.frequency,
@@ -255,6 +290,7 @@ def main():
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("check", help="preflight env and credentials").set_defaults(fn=cmd_check)
+    sub.add_parser("compliance", help="check backend/ and frontend/ for hardcoded seed terms").set_defaults(fn=cmd_compliance)
 
     m = sub.add_parser("models", help="list reachable Gemini models")
     m.add_argument("--all", action="store_true", help="include non-generative models")
