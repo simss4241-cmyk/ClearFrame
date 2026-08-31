@@ -17,11 +17,16 @@ instead of what you assumed would.
 Add --raw to any command to dump the full response object instead of a summary.
 """
 
-import argparse
-import json
 import os
 import sys
+import argparse
+import json
 import re
+
+# Ensure repository root is on sys.path
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
 
 try:
     from dotenv import load_dotenv
@@ -30,13 +35,25 @@ except ImportError:
     pass
 
 
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if sys.stderr and hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+
 # ──────────────────────────────────────────────────────────
 # output helpers
 # ──────────────────────────────────────────────────────────
 
-def ok(msg):   print(f"  \033[32m✓\033[0m {msg}")
-def bad(msg):  print(f"  \033[31m✗\033[0m {msg}")
-def warn(msg): print(f"  \033[33m!\033[0m {msg}")
+def ok(msg):   print(f"  \033[32m[OK]\033[0m {msg}")
+def bad(msg):  print(f"  \033[31m[FAIL]\033[0m {msg}")
+def warn(msg): print(f"  \033[33m[!]\033[0m {msg}")
 def head(msg): print(f"\n\033[1m{msg}\033[0m")
 
 
@@ -131,7 +148,8 @@ def cmd_compliance(args):
     forbidden_terms = [
         "Nighthawks", "Wabash", "Pendelton", "Veloce", "Hopper",
         "Beaumont", "Savannah", "Kestrel", "Hokusai", "Delacroix",
-        "Voss", "Okonkwo", "Rhapsody", "Dayton", "Kanagawa"
+        "Voss", "Okonkwo", "Rhapsody", "Dayton", "Kanagawa",
+        "Calderwood", "Braithwaite", "Debussy", "Joplin", "AeroVolt", "Warhol"
     ]
     pattern = re.compile("|".join(forbidden_terms), re.IGNORECASE)
 
@@ -280,6 +298,100 @@ def cmd_monitor_create(args):
     warn("Monitors cost money while active. Cancel it when you're done poking.")
 
 
+def cmd_gauntlet(args):
+    """
+    Runs the full Clearance pipeline against the gauntlet screenplay fixture (or custom script)
+    and verifies all extracted findings against the expected oracle.
+    """
+    import urllib.request
+    from backend.agents.orchestrator import orchestrator
+
+    script_path = args.file or os.path.join(os.path.dirname(__file__), "..", "seed", "gauntlet_script.txt")
+    if not os.path.exists(script_path):
+        bad(f"Script file not found: {script_path}")
+        sys.exit(1)
+
+    head(f"Running Gauntlet Test: {os.path.basename(script_path)}")
+    with open(script_path, "r", encoding="utf-8") as f:
+        script_text = f.read()
+
+    report = orchestrator.execute(script_text, filename=os.path.basename(script_path), title="Gauntlet Clearance Test")
+
+    all_element_reports = []
+    for dept_summary in report.departments.values():
+        all_element_reports.extend(dept_summary.elements)
+
+    print(f"\nTotal Scenes: {len(report.scenes)}")
+    print(f"Total Elements Extracted: {len(all_element_reports)}")
+    print(f"Total Verdicts Generated: {len(all_element_reports)}")
+
+    head("Extracted Elements & Deterministic Verdicts:")
+    header = f"{'#':<3} | {'Dept':<16} | {'Subtype':<16} | {'Rating':<7} | {'Rule ID':<11} | {'Element Text':<30}"
+    print(header)
+    print("-" * len(header))
+
+    ratings_count = {"RED": 0, "AMBER": 0, "GREEN": 0}
+    citations_to_check = []
+
+    for idx, el_report in enumerate(all_element_reports, 1):
+        el = el_report.element
+        v = el_report.verdict
+        r_str = v.rating.value if hasattr(v.rating, "value") else str(v.rating)
+        ratings_count[r_str] = ratings_count.get(r_str, 0) + 1
+
+        rule = v.rule_id or "—"
+        text_disp = el.text[:28] + ("…" if len(el.text) > 28 else "")
+        sub_disp = el.subtype.value if hasattr(el.subtype, "value") else str(el.subtype)
+        dept_disp = el.department.value if hasattr(el.department, "value") else str(el.department)
+
+        color = "\033[32m" if r_str == "GREEN" else "\033[33m" if r_str == "AMBER" else "\033[31m"
+        print(f"{idx:<3} | {dept_disp:<16} | {sub_disp:<16} | {color}{r_str:<7}\033[0m | {rule:<11} | {text_disp:<30}")
+
+        if v.citations:
+            citations_to_check.extend(v.citations)
+
+    print("\nSummary:")
+    print(f"  \033[31mRED\033[0m: {ratings_count.get('RED', 0)}  |  \033[33mAMBER\033[0m: {ratings_count.get('AMBER', 0)}  |  \033[32mGREEN\033[0m: {ratings_count.get('GREEN', 0)}")
+
+    if args.check_urls and citations_to_check:
+        head(f"Verifying {len(citations_to_check)} Citation URLs (Zero 404s rule)...")
+        dead_links = []
+        import ssl
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        }
+
+        for url in set(citations_to_check):
+            try:
+                req = urllib.request.Request(url, headers=headers)
+                with urllib.request.urlopen(req, context=ctx, timeout=6) as resp:
+                    if resp.status == 404 or resp.status == 410:
+                        dead_links.append((url, resp.status))
+                        bad(f"[{resp.status} DEAD] {url}")
+                    else:
+                        ok(f"[{resp.status}] {url}")
+            except urllib.error.HTTPError as he:
+                if he.code in (403, 429, 401):
+                    ok(f"[{he.code} LIVE/CHALLENGE] {url}")
+                elif he.code in (404, 410):
+                    bad(f"[{he.code} NOT FOUND] {url}")
+                    dead_links.append((url, he.code))
+                else:
+                    warn(f"[{he.code}] {url}")
+            except Exception as e:
+                bad(f"FAIL {url}: {e}")
+                dead_links.append((url, str(e)))
+        if dead_links:
+            warn(f"{len(dead_links)} dead/unreachable citation links detected.")
+        else:
+            ok("All citations verified live.")
+
+
 # ──────────────────────────────────────────────────────────
 
 def main():
@@ -291,6 +403,11 @@ def main():
 
     sub.add_parser("check", help="preflight env and credentials").set_defaults(fn=cmd_check)
     sub.add_parser("compliance", help="check backend/ and frontend/ for hardcoded seed terms").set_defaults(fn=cmd_compliance)
+
+    gt = sub.add_parser("gauntlet", help="run full clearance pipeline against gauntlet fixture")
+    gt.add_argument("-f", "--file", help="path to script file (default: seed/gauntlet_script.txt)")
+    gt.add_argument("--check-urls", action="store_true", help="verify all citation URLs live without 404")
+    gt.set_defaults(fn=cmd_gauntlet)
 
     m = sub.add_parser("models", help="list reachable Gemini models")
     m.add_argument("--all", action="store_true", help="include non-generative models")
