@@ -3,137 +3,325 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CLEARFRAME — Screenplay Clearance Production Studio</title>
+    <title>CLEARFRAME — Production Counsel Forensic Workstation</title>
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="dark-theme">
 
-    <!-- Top Navigation Header -->
+    <!-- Cinematic 35mm Spinning Film Reel Scanning Cursor -->
+    <div id="custom-film-reel-cursor" class="film-reel-cursor" aria-hidden="true">
+        <svg viewBox="0 0 44 44" width="36" height="36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="22" cy="22" r="19.5" stroke="#38bdf8" stroke-width="2" stroke-dasharray="3.5 1.5" />
+            <circle cx="22" cy="22" r="16.5" stroke="#0284c7" stroke-width="1.2" />
+            <circle cx="22" cy="9.5" r="3.2" fill="#38bdf8" opacity="0.95" />
+            <circle cx="33.8" cy="18" r="3.2" fill="#38bdf8" opacity="0.95" />
+            <circle cx="29.3" cy="31.8" r="3.2" fill="#38bdf8" opacity="0.95" />
+            <circle cx="14.7" cy="31.8" r="3.2" fill="#38bdf8" opacity="0.95" />
+            <circle cx="10.2" cy="18" r="3.2" fill="#38bdf8" opacity="0.95" />
+            <circle cx="22" cy="22" r="5" fill="#090d16" stroke="#38bdf8" stroke-width="2.2" />
+            <circle cx="22" cy="22" r="2" fill="#38bdf8" />
+        </svg>
+    </div>
+
+    <!-- Top Station Header -->
     <header class="studio-header">
         <div class="brand">
             <div class="logo-mark">CF</div>
             <div class="brand-text">
                 <h1>CLEARFRAME</h1>
-                <span class="sub-heading">Production Studio &amp; Script Clearance Agent</span>
+                <span class="sub-heading">FORENSIC CLEARANCE WORKSTATION // PRODUCTION LEGAL</span>
             </div>
         </div>
 
         <div class="engine-badges">
-            <div class="badge gcp"><span class="dot"></span> Google Cloud ADK &amp; Gemini</div>
-            <div class="badge parallel"><span class="dot"></span> Parallel Search &amp; Monitor</div>
+            <div class="badge gcp"><span class="dot"></span> GOOGLE CLOUD ADK &amp; GEMINI</div>
+            <div class="badge parallel"><span class="dot"></span> PARALLEL SEARCH &amp; MONITOR</div>
         </div>
 
         <div class="header-actions">
-            <button id="btn-demo" class="btn btn-primary">
-                <span class="icon">🎬</span> Run Demo Scene
-            </button>
-            <label for="script-file-input" class="btn btn-secondary">
-                <span class="icon">📁</span> Upload Script
-            </label>
+            <div class="demo-select-container">
+                <select id="demo-fixture-select" class="demo-dropdown">
+                    <option value="scene_01">Scene 01: Standard Demo</option>
+                    <option value="scene_02">Scene 02: Multi-Dept Demo</option>
+                    <option value="gauntlet">Gauntlet: 3-Scene Forensic Suite</option>
+                </select>
+                <button id="btn-demo" class="btn btn-primary">
+                    <span class="icon">🎬</span> Run Demo
+                </button>
+            </div>
             <input type="file" id="script-file-input" accept=".txt,.fdx,.pdf" hidden>
         </div>
     </header>
 
-    <!-- Main Studio Workspace -->
+    <!-- Main Forensic Workspace -->
     <main class="studio-workspace">
 
-        <!-- Left Column: The Script Viewer (The Master Shot) -->
+        <!-- Left Column: Master Screenplay Docket -->
         <section class="panel script-panel">
             <div class="panel-header">
-                <h2><span class="icon">📜</span> Screenplay Viewer</h2>
-                <div class="script-meta-group">
-                    <span class="script-meta" id="script-filename">No script loaded</span>
-                    <span class="script-hash-tag" id="script-hash">--</span>
+                <div class="panel-title-group">
+                    <span class="reticle-mark">⌖</span>
+                    <h2>SCREENPLAY DOCKET</h2>
+                    <span class="script-meta-pill" id="script-filename-pill">
+                        <span class="status-dot green" id="script-status-dot"></span>
+                        <span id="script-filename">NO SCRIPT LOADED</span>
+                    </span>
+                </div>
+
+                <div class="script-action-toolbar">
+                    <!-- Read / Edit Mode Toggle -->
+                    <div class="mode-toggle-group" title="Toggle between reading/highlight mode and direct text editor">
+                        <button type="button" id="btn-mode-view" class="mode-btn active"><span class="icon">👁️</span> Read</button>
+                        <button type="button" id="btn-mode-edit" class="mode-btn"><span class="icon">✏️</span> Edit</button>
+                    </div>
+
+                    <!-- Load Script Button -->
+                    <label for="script-file-input" class="btn btn-secondary btn-sm" id="btn-load-script" title="Load screenplay file into docket">
+                        <span class="icon">📁</span> Load
+                    </label>
+
+                    <!-- Save / Export Dropdown -->
+                    <div class="export-dropdown-container">
+                        <button type="button" id="btn-export-toggle" class="btn btn-secondary btn-sm" disabled title="Save &amp; export screenplay">
+                            <span class="icon">💾</span> Save <span class="caret">▾</span>
+                        </button>
+                        <div class="export-menu" id="export-menu">
+                            <button type="button" id="btn-export-txt" class="export-menu-item">📄 Clean Screenplay (.txt)</button>
+                            <button type="button" id="btn-export-fdx" class="export-menu-item">🎬 Final Draft XML (.fdx)</button>
+                            <button type="button" id="btn-export-docket" class="export-menu-item">📑 Clearance Docket (.json)</button>
+                        </div>
+                    </div>
+
+                    <!-- Run Clearance Button -->
+                    <button type="button" id="btn-run-clearance" class="btn btn-play" disabled title="Execute clearance analysis on script">
+                        <span class="play-icon">▶</span> Run Clearance
+                    </button>
                 </div>
             </div>
             <div class="script-content-wrapper" id="script-content">
                 <div class="empty-state">
-                    <p>No script loaded. Click <strong>Upload Script</strong> to analyze a screenplay, or click <strong>Run Demo Scene</strong> to test with the example fixture.</p>
+                    <div class="empty-icon">📜</div>
+                    <p>Screenplay Docket Idle. Click <strong>Load Script</strong> to mount a production screenplay (.txt / .fdx) or test with <strong>Run Demo</strong>.</p>
                 </div>
             </div>
         </section>
 
-        <!-- Right Column: Clearance Radar & Department Plugins -->
+        <!-- Right Column: Forensic Radar & Evidence Exhibits -->
         <section class="panel report-panel">
             
-            <!-- Clearance Radar Dashboard -->
+            <!-- Forensic Radar & Instrument Telemetry HUD -->
             <div class="radar-dashboard">
                 <div class="radar-header">
-                    <h3>CLEARANCE RADAR</h3>
-                    <span class="radar-status" id="radar-status">Idle</span>
+                    <div class="radar-title-group">
+                        <span class="radar-pip"></span>
+                        <h3>FORENSIC CLEARANCE RADAR &amp; TELEMETRY</h3>
+                    </div>
+                    <span class="radar-status" id="radar-status">STANDBY</span>
                 </div>
-                <div class="radar-metrics">
-                    <div class="metric-card total">
-                        <span class="value" id="metric-total">0</span>
-                        <span class="label">Elements</span>
+
+                <!-- Polar Radar Scope & Instrument Readouts -->
+                <div class="radar-instrument-deck">
+                    <div class="polar-scope-container">
+                        <canvas id="radar-canvas" width="140" height="140"></canvas>
+                        <div class="scope-legend">
+                            <span class="legend-pip red"></span> CORE: INFRINGE
+                            <span class="legend-pip amber"></span> MID: REVIEW
+                            <span class="legend-pip green"></span> OUTER: CLEAR
+                        </div>
                     </div>
-                    <div class="metric-card red">
-                        <span class="value" id="metric-red">0</span>
-                        <span class="label">RED Risk</span>
+
+                    <div class="instrument-telemetry-grid">
+                        <div class="telemetry-card integrity">
+                            <span class="telemetry-label">TITLE INTEGRITY INDEX</span>
+                            <div class="telemetry-value-row">
+                                <span class="telemetry-value" id="telemetry-integrity">100%</span>
+                                <span class="telemetry-badge" id="telemetry-integrity-badge">CLEARED</span>
+                            </div>
+                        </div>
+
+                        <div class="telemetry-card red">
+                            <span class="telemetry-label">STATUTORY EXPOSURE FLAGGED</span>
+                            <div class="telemetry-value-row">
+                                <span class="telemetry-value" id="metric-red">0</span>
+                                <span class="telemetry-sub">IDENTIFIED IN SCOPE</span>
+                            </div>
+                        </div>
+
+                        <div class="telemetry-card amber">
+                            <span class="telemetry-label">UNRESOLVED CLAIMS</span>
+                            <div class="telemetry-value-row">
+                                <span class="telemetry-value" id="metric-amber">0</span>
+                                <span class="telemetry-sub">PENDING INQUIRY</span>
+                            </div>
+                        </div>
+
+                        <div class="telemetry-card green">
+                            <span class="telemetry-label">PARALLEL CORROBORATION</span>
+                            <div class="telemetry-value-row">
+                                <span class="telemetry-value" id="telemetry-corroboration">100%</span>
+                                <span class="telemetry-sub" id="telemetry-exhibits-count">0 EXHIBITS CITED</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="metric-card amber">
-                        <span class="value" id="metric-amber">0</span>
-                        <span class="label">AMBER Review</span>
+                </div>
+
+                <!-- Segmented Distribution Ratio Bar -->
+                <div class="radar-progress-wrapper" id="radar-progress-wrapper">
+                    <div class="radar-progress-bar">
+                        <div class="progress-segment green" id="prog-green" style="width: 0%;"></div>
+                        <div class="progress-segment amber" id="prog-amber" style="width: 0%;"></div>
+                        <div class="progress-segment red" id="prog-red" style="width: 0%;"></div>
                     </div>
-                    <div class="metric-card green">
-                        <span class="value" id="metric-green">0</span>
-                        <span class="label">GREEN Clear</span>
+                    <div class="radar-progress-labels">
+                        <span id="prog-label-green">0% NO ITEMS IDENTIFIED</span>
+                        <span id="prog-label-amber">0% AMBER REVIEW</span>
+                        <span id="prog-label-red">0% STATUTORY EXPOSURE</span>
                     </div>
+                </div>
+
+                <!-- Persistent Legal Disclaimer Footer -->
+                <div class="telemetry-legal-disclaimer">
+                    Scope-limited automated review. Not a clearance opinion. Does not substitute for E&amp;O counsel.
                 </div>
             </div>
 
             <!-- Error Banner Container -->
             <div class="error-banner-wrapper" id="error-banner-wrapper" style="display: none;"></div>
 
-            <!-- Department Plugin Tab Bar -->
+            <!-- Department Docket Filter Bar -->
             <nav class="department-tabs" id="dept-tabs">
                 <button class="tab-btn active" data-dept="SOUND_MUSIC">
-                    <span class="tab-icon">🎵</span> Sound &amp; Music
+                    <span class="tab-icon">🎵</span> <span class="tab-name">SOUND &amp; MUSIC</span>
                     <span class="tab-badge" id="badge-SOUND_MUSIC">0</span>
                 </button>
                 <button class="tab-btn" data-dept="SCRIPT_SIGNAGE">
-                    <span class="tab-icon">📜</span> Script &amp; Signage
+                    <span class="tab-icon">📜</span> <span class="tab-name">SCRIPT &amp; SIGNAGE</span>
                     <span class="tab-badge" id="badge-SCRIPT_SIGNAGE">0</span>
                 </button>
                 <button class="tab-btn" data-dept="CAST_CHARACTERS">
-                    <span class="tab-icon">🎭</span> Cast &amp; Characters
+                    <span class="tab-icon">🎭</span> <span class="tab-name">CAST &amp; CHARACTERS</span>
                     <span class="tab-badge" id="badge-CAST_CHARACTERS">0</span>
                 </button>
                 <button class="tab-btn" data-dept="LOCATIONS_SETS">
-                    <span class="tab-icon">📍</span> Locations &amp; Sets
+                    <span class="tab-icon">📍</span> <span class="tab-name">LOCATIONS &amp; SETS</span>
                     <span class="tab-badge" id="badge-LOCATIONS_SETS">0</span>
                 </button>
                 <button class="tab-btn" data-dept="PROPS_BRANDS">
-                    <span class="tab-icon">🏷️</span> Props &amp; Brands
+                    <span class="tab-icon">🏷️</span> <span class="tab-name">PROPS &amp; BRANDS</span>
                     <span class="tab-badge" id="badge-PROPS_BRANDS">0</span>
                 </button>
                 <button class="tab-btn" data-dept="CAMERA_VISUALS">
-                    <span class="tab-icon">🎨</span> Camera &amp; Visuals
+                    <span class="tab-icon">🎨</span> <span class="tab-name">CAMERA &amp; VISUALS</span>
                     <span class="tab-badge" id="badge-CAMERA_VISUALS">0</span>
                 </button>
             </nav>
 
-            <!-- Department Cards Workspace -->
+            <!-- Evidence Case-File Exhibit Stream -->
             <div class="plugin-workspace" id="plugin-workspace">
-                <div class="empty-state">
-                    <p>Select a Department Plugin or run an analysis to view cited findings and deterministic verdicts.</p>
+                <div class="preflight-station">
+                    <div class="cinema-slate preflight-slate">
+                        <div class="slate-clapper-stick ready-stick"></div>
+                        <div class="slate-board-content">
+                            <div class="slate-title-row">
+                                <span class="slate-title-text">CLEARFRAME // PRE-FLIGHT CLEARANCE DOCKET</span>
+                                <span class="slate-take-badge amber">STANDBY // MOUNT REQ</span>
+                            </div>
+                            <div class="slate-grid-meta">
+                                <div class="slate-meta-field">
+                                    <span class="field-label">DOCKET STATUS:</span>
+                                    <span class="field-val">Awaiting Screenplay File (.txt / .fdx)</span>
+                                </div>
+                                <div class="slate-meta-field">
+                                    <span class="field-label">ORCHESTRATION:</span>
+                                    <span class="field-val">Google Cloud Gemini 3.1</span>
+                                </div>
+                                <div class="slate-meta-field">
+                                    <span class="field-label">SEARCH REGISTRIES:</span>
+                                    <span class="field-val">Parallel Web Real-Time</span>
+                                </div>
+                                <div class="slate-meta-field">
+                                    <span class="field-label">VERDICT ENGINE:</span>
+                                    <span class="field-val">Gemini Extraction → Deterministic Rule-ID Mapping</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="preflight-scope-box">
+                        <div class="preflight-scope-header">
+                            <span>⌖ PRODUCTION CLEARANCE SCOPE (6 SPECIALIZED DEPARTMENTS)</span>
+                        </div>
+                        <div class="preflight-dept-grid">
+                            <div class="preflight-dept-card">
+                                <div class="pdept-icon">🎵</div>
+                                <div class="pdept-info">
+                                    <strong>SOUND &amp; MUSIC</strong>
+                                    <p id="pdept-music-desc">Master + sync licenses, composition vs. recording terms, public domain status (compositions through 1930, recordings through 1925). Motion picture soundtracks carry film term (17 U.S.C. § 101).</p>
+                                </div>
+                            </div>
+                            <div class="preflight-dept-card">
+                                <div class="pdept-icon">📜</div>
+                                <div class="pdept-info">
+                                    <strong>SCRIPT &amp; SIGNAGE</strong>
+                                    <p>Fictitious 555 numbers, real addresses, business signage, domain names.</p>
+                                </div>
+                            </div>
+                            <div class="preflight-dept-card">
+                                <div class="pdept-icon">🎭</div>
+                                <div class="pdept-info">
+                                    <strong>CAST &amp; CHARACTERS</strong>
+                                    <p>Living person rights of publicity, celebrity personas, trademarked characters.</p>
+                                </div>
+                            </div>
+                            <div class="preflight-dept-card">
+                                <div class="pdept-icon">📍</div>
+                                <div class="pdept-info">
+                                    <strong>LOCATIONS &amp; SETS</strong>
+                                    <p>Private architectural copyright, municipal permits, location release terms.</p>
+                                </div>
+                            </div>
+                            <div class="preflight-dept-card">
+                                <div class="pdept-icon">🏷️</div>
+                                <div class="pdept-info">
+                                    <strong>PROPS &amp; BRANDS</strong>
+                                    <p>Lanham Act trade dress, consumer brands, false endorsement liabilities.</p>
+                                </div>
+                            </div>
+                            <div class="preflight-dept-card">
+                                <div class="pdept-icon">🎨</div>
+                                <div class="pdept-info">
+                                    <strong>CAMERA &amp; VISUALS</strong>
+                                    <p>Artwork provenance, VARA visual artists rights, museum &amp; gallery copyright.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="preflight-action-callout idle">
+                        <div class="callout-icon">📂</div>
+                        <div class="callout-text">
+                            <strong>MOUNT PRODUCTION SCREENPLAY</strong>
+                            <p>Click <strong>📁 Load</strong> above to mount a <code>.txt</code> or <code>.fdx</code> screenplay, or click <strong>🎬 Run Demo</strong> for instant evaluation.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
 
         </section>
     </main>
 
-    <!-- Bottom Parallel Live Watch Drawer -->
+    <!-- Bottom Parallel Live Watchdog Drawer -->
     <footer class="watch-drawer" id="watch-drawer">
         <div class="drawer-header" id="drawer-toggle">
             <div class="drawer-title">
                 <span class="pulse-indicator"></span>
-                <strong>PARALLEL LIVE WATCH</strong>
-                <span class="monitor-count" id="monitor-count">0 Active Monitors</span>
+                <strong>PARALLEL LIVE WATCHDOG</strong>
+                <span class="classification-sub">[ STANDING EVENT STREAM ]</span>
+                <span class="monitor-count" id="monitor-count">0 ACTIVE MONITORS</span>
             </div>
             <div class="drawer-control">
                 <span class="toggle-icon">▲</span>
@@ -143,7 +331,7 @@
             <div class="monitor-feed" id="monitor-feed">
                 <div class="feed-item placeholder">
                     <span class="timestamp">--:--:--</span>
-                    <span class="event-text">Parallel Monitor standing watch on flagged RED &amp; AMBER elements. Webhook events will stream here.</span>
+                    <span class="event-text">Parallel Monitor standing watch on flagged RED &amp; AMBER elements. Webhook events stream here in real-time.</span>
                 </div>
             </div>
         </div>
