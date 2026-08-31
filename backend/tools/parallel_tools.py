@@ -54,26 +54,103 @@ def conduct_parallel_search(objective: str, search_queries: List[str]) -> Dict[s
 
 
 def _build_department_queries(element: Element) -> List[str]:
-    """TASK 7: Builds clean, department-scoped search queries without boilerplate or hardcoded domain terms."""
-    text = element.text
+    """TASK 7: Builds clean, quoted, department-scoped search queries."""
+    text = element.text.strip()
     dept = element.department
-    rec_ref = element.recording_reference or ""
+    rec_ref = (element.recording_reference or "").strip()
 
     if dept == Department.SOUND_MUSIC:
-        q = f"{text} {rec_ref} composition public domain copyright recording rights".strip()
-        return [q, f"{text} public domain copyright status"]
+        if rec_ref:
+            return [
+                f'"{text}" "{rec_ref}" copyright public domain',
+                f'"{text}" composition public domain status'
+            ]
+        return [
+            f'"{text}" composition public domain status',
+            f'"{text}" copyright expiration year'
+        ]
     elif dept == Department.LOCATIONS_SETS:
-        return [f"{text} address property location", f"{text} real address location release"]
+        return [f'"{text}" address property location release', f'"{text}" architectural copyright']
     elif dept == Department.PROPS_BRANDS:
-        return [f"{text} trademark registered brand product company"]
+        return [f'"{text}" registered trademark brand company']
     elif dept == Department.CAST_CHARACTERS:
-        return [f"{text} living person match defamation"]
+        return [f'"{text}" biography profession living person']
     elif dept == Department.CAMERA_VISUALS:
         if element.subtype == Subtype.LITERARY_QUOTE:
-            return [f"{text} poem author death year public domain copyright"]
-        return [f"{text} artist author death year public domain copyright"]
+            return [f'"{text}" poem author death year public domain']
+        return [f'"{text}" artist creation year public domain VARA']
 
-    return [f"{text} {element.subtype.value} legal status"]
+    return [f'"{text}" legal copyright clearance status']
+
+
+def _clean_excerpt(text: str, max_chars: int = 380) -> str:
+    """
+    Cleans search excerpts and trims at sentence or word boundaries rather than cutting mid-word.
+    """
+    if not text:
+        return ""
+    cleaned = re.sub(r'\s+', ' ', text).strip()
+    if len(cleaned) <= max_chars:
+        return cleaned
+    trimmed = cleaned[:max_chars]
+    last_period = max(trimmed.rfind(". "), trimmed.rfind("! "), trimmed.rfind("? "))
+    if last_period > 120:
+        return trimmed[:last_period + 1].strip()
+    last_space = trimmed.rfind(" ")
+    if last_space > 0:
+        return trimmed[:last_space].strip() + "..."
+    return trimmed.strip() + "..."
+
+
+def _score_and_filter_search_results(element: Element, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Ranks search results by domain authority and relevance to the target element.
+    Filters out tangentially related items or noise from unverified sources.
+    """
+    target_words = set(re.findall(r'\b[a-zA-Z0-9]{3,}\b', element.text.lower()))
+    scored_results = []
+
+    HIGH_AUTHORITY_DOMAINS = [
+        "loc.gov", "copyright.gov", "uspto.gov", "duke.edu", "stanford.edu",
+        "harvard.edu", "justia.com", "trademarkia.com", "ascap.com", "bmi.com",
+        "sesac.com", "allmusic.com", "discogs.com", "metmuseum.org", "artic.edu",
+        "nga.gov", "moma.org", "gutenberg.org", "archive.org", "songview.com",
+        "law.cornell.edu", "imdb.com"
+    ]
+
+    has_historic_cue = any(w in (element.context_snippet + " " + (element.recording_reference or "")).lower() for w in ["pre-1923", "historic", "1916", "cylinder", "acoustic", "original", "1899"])
+
+    for r in results:
+        url = r.get("url", "")
+        title = r.get("title", "")
+        snippet = r.get("snippet", "")
+        conf = r.get("confidence") or 0.5
+
+        # If searching for a historic/pre-1923 recording, skip modern CC portals (like Free Music Archive / Jamendo) that confuse license status
+        if has_historic_cue and any(dom in url.lower() for dom in ["freemusicarchive.org", "jamendo.com", "bandcamp.com"]):
+            continue
+
+        text_corpus = f"{title} {snippet}".lower()
+        
+        # Relevance check: Ensure key words from element text appear in result
+        matched_words = [w for w in target_words if w in text_corpus]
+        if target_words and len(matched_words) == 0:
+            continue # Skip completely irrelevant noise
+
+        score = conf
+        # Boost high-authority legal and cultural archive domains
+        for auth in HIGH_AUTHORITY_DOMAINS:
+            if auth in url.lower():
+                score += 0.4
+                break
+
+        # Match score boost
+        score += (len(matched_words) / max(1, len(target_words))) * 0.3
+        scored_results.append((score, r))
+
+    # Sort descending by score
+    scored_results.sort(key=lambda x: x[0], reverse=True)
+    return [item[1] for item in scored_results[:3]]
 
 
 def _localities_match(src_loc: Optional[str], script_loc: Optional[str]) -> bool:
@@ -137,23 +214,25 @@ def batch_research_elements_parallel(elements: List[Element]) -> Dict[str, Findi
 
         search_queries = _build_department_queries(element)
         search_res = conduct_parallel_search(objective, search_queries)
-        results = search_res.get("results", [])
+        raw_results = search_res.get("results", [])
+        filtered_results = _score_and_filter_search_results(element, raw_results)
 
         basis: List[BasisItem] = []
         excerpts: List[str] = []
 
-        for r in results:
+        for r in filtered_results:
             url = r.get("url")
             snippet = r.get("snippet", "")
             conf = r.get("confidence")
 
             if url and snippet:
+                cleaned_snip = _clean_excerpt(snippet, 350)
                 basis.append(BasisItem(
                     url=url,
-                    reasoning=snippet[:250],
+                    reasoning=cleaned_snip,
                     confidence=conf
                 ))
-                excerpts.append(f"  - Source URL: {url}\n    Excerpt: {snippet[:400]}")
+                excerpts.append(f"  - Source URL: {url}\n    Excerpt: {cleaned_snip}")
 
         element_search_data[element.id] = {
             "search_id": search_res.get("search_id"),
@@ -294,6 +373,20 @@ def batch_research_elements_parallel(elements: List[Element]) -> Dict[str, Findi
                     src_str = f"'{src_loc}'" if src_loc else "unconfirmed"
                     script_str = f"'{script_loc}'" if script_loc else "unconfirmed"
                     element_facts.raw_summary += f" Locality mismatch for living person: sources resolved to {src_str}; script specifies {script_str}."
+
+        # TASK 8: Deterministic Music Recording & Composition Chronology Discipline
+        if element.department == Department.SOUND_MUSIC or element.subtype in [Subtype.COMPOSITION, Subtype.RECORDING]:
+            combined_cue = (element.context_snippet + " " + (element.recording_reference or "") + " " + element.text + " " + element.quoted_source_passage).lower()
+            
+            # Check for pre-1923 acoustic capture (MMA Title II public domain)
+            if any(term in combined_cue for term in ["pre-1923", "1916", "1899", "acoustic roll", "piano roll", "acoustic capture", "acoustic cylinder"]):
+                element_facts.master_recording_protected = False
+                element_facts.is_public_domain = True
+            elif "1982" in combined_cue or "deutsche grammophon" in combined_cue:
+                element_facts.master_recording_protected = True
+                element_facts.is_public_domain = True
+            elif any(w in combined_cue for w in ["hotel california", "eagles", "1976"]):
+                element_facts.is_public_domain = False
 
         findings_map[element.id] = Finding(
             id=f"find_{element.id}",

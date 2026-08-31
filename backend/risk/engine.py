@@ -1,24 +1,24 @@
 from typing import List, Dict, Callable, Optional
 from backend.models.clearance import Element, Facts, Verdict, RiskRating, Department
 from backend.risk.rules import (
-    rule_mus_001, rule_mus_002, rule_mus_003,
-    rule_sig_001, rule_sig_002,
+    rule_mus_001, rule_mus_002, rule_mus_003, rule_mus_004,
+    rule_sig_001, rule_sig_002, rule_sig_003, rule_sig_004,
     rule_cas_001,
-    rule_loc_001,
+    rule_loc_001, rule_loc_002,
     rule_prp_001, rule_prp_002,
-    rule_vis_001, rule_vis_002,
+    rule_vis_001, rule_vis_002, rule_arch_001,
     rule_lit_001, rule_lit_002,
     create_verdict
 )
 
 # Department-Scoped Rule Registry
 DEPARTMENT_RULES: Dict[Department, List[Callable[[Element, Facts, List[str]], Optional[Verdict]]]] = {
-    Department.SOUND_MUSIC: [rule_mus_001, rule_mus_002, rule_mus_003],
-    Department.SCRIPT_SIGNAGE: [rule_sig_001, rule_sig_002],
+    Department.SOUND_MUSIC: [rule_mus_001, rule_mus_002, rule_mus_003, rule_mus_004],
+    Department.SCRIPT_SIGNAGE: [rule_sig_001, rule_sig_002, rule_sig_003, rule_sig_004],
     Department.CAST_CHARACTERS: [rule_cas_001],
-    Department.LOCATIONS_SETS: [rule_loc_001],
+    Department.LOCATIONS_SETS: [rule_loc_001, rule_loc_002],
     Department.PROPS_BRANDS: [rule_prp_001, rule_prp_002],
-    Department.CAMERA_VISUALS: [rule_vis_001, rule_vis_002, rule_lit_001, rule_lit_002],
+    Department.CAMERA_VISUALS: [rule_vis_001, rule_vis_002, rule_arch_001, rule_lit_001, rule_lit_002],
 }
 
 

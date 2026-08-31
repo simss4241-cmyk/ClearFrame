@@ -23,9 +23,11 @@ class ClearanceStorage:
         self.local_file = os.path.join(os.path.dirname(__file__), "..", "data_store.json")
         self.cache: Dict[str, ClearanceReport] = {}
 
-        if firestore is not None and os.getenv("GOOGLE_CLOUD_PROJECT"):
+        project = os.getenv("GOOGLE_CLOUD_PROJECT")
+        if firestore is not None and project and project.strip() and project != "your-gcp-project-id":
             try:
-                self.db = firestore.Client()
+                database = os.getenv("FIRESTORE_DATABASE", "(default)")
+                self.db = firestore.Client(project=project.strip(), database=database)
             except Exception as e:
                 logger.error(f"Failed to initialize Firestore client: {e}")
                 raise RuntimeError(f"Firestore initialization failed: {e}") from e

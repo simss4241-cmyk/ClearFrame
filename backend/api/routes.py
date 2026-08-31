@@ -101,24 +101,37 @@ def run_full_clearance_pipeline(script_text: str, filename: str = "script.txt", 
 
 
 @router.get("/demo")
-def run_demo_clearance():
-    """Runs end-to-end clearance pipeline ONLY on explicit demo button click."""
-    seed_path = os.path.join(os.path.dirname(__file__), "..", "..", "seed", "scene_01.txt")
+@router.get("/demo/{fixture_name}")
+def run_demo_clearance(fixture_name: str = "scene_01"):
+    """Runs end-to-end clearance pipeline on chosen seed fixture (scene_01, scene_02, gauntlet)."""
+    clean_name = fixture_name.lower().replace(".txt", "")
+    valid_map = {
+        "scene_01": ("scene_01.txt", "Seed Scene 01"),
+        "scene_02": ("scene_02.txt", "Seed Scene 02"),
+        "gauntlet": ("gauntlet_script.txt", "Gauntlet Test (Chain of Title)"),
+        "gauntlet_script": ("gauntlet_script.txt", "Gauntlet Test (Chain of Title)")
+    }
+
+    if clean_name not in valid_map:
+        raise HTTPException(status_code=404, detail=f"Unknown demo fixture '{fixture_name}'. Options: scene_01, scene_02, gauntlet.")
+
+    filename, title = valid_map[clean_name]
+    seed_path = os.path.join(os.path.dirname(__file__), "..", "..", "seed", filename)
     if not os.path.exists(seed_path):
-        raise HTTPException(status_code=404, detail="Seed scene file not found.")
+        raise HTTPException(status_code=404, detail=f"Seed fixture file not found: {filename}")
 
     with open(seed_path, "r", encoding="utf-8") as f:
         script_text = f.read()
 
     try:
-        return run_full_clearance_pipeline(script_text, filename="scene_01.txt", title="Seeded Screenplay Scene 01")
+        return run_full_clearance_pipeline(script_text, filename=filename, title=title)
     except Exception as e:
         script_hash = hashlib.sha256(script_text.encode("utf-8")).hexdigest()[:12]
         return JSONResponse(
             status_code=502,
             content={
                 "detail": str(e),
-                "filename": "scene_01.txt",
+                "filename": filename,
                 "script_hash": script_hash,
                 "status": "INCOMPLETE_ERROR"
             }
@@ -138,16 +151,22 @@ def analyze_script(
     If Gemini/Parallel fails, returns a 502 JSON error marking the run INCOMPLETE.
     """
     script_text = ""
-    target_filename = filename or "submitted_script.txt"
+    target_filename = (filename or "submitted_script.txt").strip()
 
     if file is not None and hasattr(file, "file"):
         script_text = file.file.read().decode("utf-8", errors="ignore")
         if file.filename:
-            target_filename = file.filename
+            target_filename = file.filename.strip()
     elif text:
         script_text = text
     else:
         raise HTTPException(status_code=400, detail="Must provide script text or file.")
+
+    # Strip repeated extensions like .txt.txt or .TXT.txt
+    while target_filename.lower().endswith(".txt.txt"):
+        target_filename = target_filename[:-4]
+    while target_filename.lower().endswith(".fdx.fdx"):
+        target_filename = target_filename[:-4]
 
     script_hash = hashlib.sha256(script_text.encode("utf-8")).hexdigest()[:12]
 

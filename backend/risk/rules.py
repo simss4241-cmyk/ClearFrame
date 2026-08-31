@@ -82,6 +82,29 @@ def rule_mus_003(element: Element, facts: Facts, citations: List[str]) -> Option
     return None
 
 
+def rule_mus_004(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
+    """MUS-004: Recording is part of a motion picture soundtrack (17 U.S.C. § 101)."""
+    if facts.is_motion_picture_soundtrack is True:
+        # Sounds accompanying a motion picture carry the film's copyright term, not the standalone MMA clock
+        if facts.film_copyright_active is False or facts.is_public_domain is True:
+            return create_verdict(
+                element=element,
+                rating=RiskRating.GREEN,
+                rule_id="MUS-004",
+                rationale="Soundtrack recording accompanying a motion picture carries film's expired copyright term (17 U.S.C. § 101 statutory exclusion from standalone MMA sound recording clock).",
+                citations=citations
+            )
+        else:
+            return create_verdict(
+                element=element,
+                rating=RiskRating.RED,
+                rule_id="MUS-004",
+                rationale="Motion picture soundtrack audio is governed by the underlying film's active copyright term under 17 U.S.C. § 101. Studio master sync license required.",
+                citations=citations
+            )
+    return None
+
+
 # ----------------------------------------------------
 # Department: SCRIPT_SIGNAGE
 # ----------------------------------------------------
@@ -113,6 +136,32 @@ def rule_sig_002(element: Element, facts: Facts, citations: List[str]) -> Option
     return None
 
 
+def rule_sig_003(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
+    """SIG-003: On-screen web domain / URL."""
+    if element.subtype == Subtype.URL:
+        return create_verdict(
+            element=element,
+            rating=RiskRating.AMBER,
+            rule_id="SIG-003",
+            rationale="On-screen web domain name. Verification of studio ownership or clearance release required to prevent trademark collision.",
+            citations=citations
+        )
+    return None
+
+
+def rule_sig_004(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
+    """SIG-004: On-screen vehicle license plate."""
+    if element.subtype == Subtype.LICENSE_PLATE:
+        return create_verdict(
+            element=element,
+            rating=RiskRating.AMBER,
+            rule_id="SIG-004",
+            rationale="On-screen vehicle license plate. Production must verify format falls within state-issued fictitious/prop range.",
+            citations=citations
+        )
+    return None
+
+
 # ----------------------------------------------------
 # Department: CAST_CHARACTERS
 # ----------------------------------------------------
@@ -141,6 +190,19 @@ def rule_loc_001(element: Element, facts: Facts, citations: List[str]) -> Option
             rating=RiskRating.RED,
             rule_id="LOC-001",
             rationale="Identifies an active real street address on private commercial/residential property. Location release required.",
+            citations=citations
+        )
+    return None
+
+
+def rule_loc_002(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
+    """LOC-002: Public municipal landmark, park, or geographical location."""
+    if element.subtype == Subtype.LANDMARK or (facts.is_private_property is False and facts.is_real_address is False):
+        return create_verdict(
+            element=element,
+            rating=RiskRating.GREEN,
+            rule_id="LOC-002",
+            rationale="Public municipal landmark or geographical location. No private property location release required.",
             citations=citations
         )
     return None
@@ -234,3 +296,17 @@ def rule_lit_002(element: Element, facts: Facts, citations: List[str]) -> Option
                 citations=citations
             )
     return None
+
+
+def rule_arch_001(element: Element, facts: Facts, citations: List[str]) -> Optional[Verdict]:
+    """ARCH-001: Archival newsreel or historical broadcast footage."""
+    if element.subtype == Subtype.ARCHIVAL_FOOTAGE:
+        return create_verdict(
+            element=element,
+            rating=RiskRating.AMBER,
+            rule_id="ARCH-001",
+            rationale="Archival broadcast footage identified. Network broadcast licensing and talent re-use clearance required.",
+            citations=citations
+        )
+    return None
+

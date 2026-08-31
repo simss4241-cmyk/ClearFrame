@@ -19,6 +19,10 @@ def get_gemini_client() -> genai.Client:
     location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
     api_key = os.getenv("GEMINI_API_KEY")
 
+    if api_key and api_key.strip():
+        logger.info("Initializing Gemini Client via Google AI API Key.")
+        return genai.Client(api_key=api_key.strip())
+
     if use_vertex:
         if not project or project.strip() == "" or project == "your-gcp-project-id":
             raise RuntimeError(
@@ -27,10 +31,6 @@ def get_gemini_client() -> genai.Client:
             )
         logger.info(f"Initializing Gemini Client via Vertex AI (project={project}, location={location})")
         return genai.Client(vertexai=True, project=project, location=location)
-
-    if api_key and api_key.strip():
-        logger.info("Initializing Gemini Client via direct API Key.")
-        return genai.Client(api_key=api_key.strip())
 
     raise RuntimeError(
         "No valid Google Cloud AI credentials found. "
