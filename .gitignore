@@ -24,3 +24,10 @@ data_store.json
 *.log
 .DS_Store
 
+# video & audio production artifacts
+Video/*.mp4
+Video/*.wav
+Video/audio_chunks/
+Video/BL_proxy/
+
+

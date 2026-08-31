@@ -265,6 +265,12 @@ To remain cleanly within Gemini Free Tier limits (20 requests/day per model) dur
 
 Total Gemini spend per clearance run is **3 API calls** regardless of element count.
 
+### Parallel Monitor Controls & Credit Protection
+To prevent accidental monitor credit exhaustion during local development or test suites:
+- `ENABLE_PARALLEL_MONITORS=false`: Disables live monitor creation during local testing while preserving report generation and typing.
+- `PARALLEL_MONITOR_MAX_COUNT=5`: Caps the number of live monitors created per script analysis to prevent runaway quota consumption.
+- On Cloud Run production deployment for judging, set `ENABLE_PARALLEL_MONITORS=true`.
+
 ### Process Restart Protocol
 Any modification to `.env` or files under `backend/` requires a full process kill and relaunch of the server (`uvicorn backend.api.main:app`). Never test against a running process after backend edits.
 
